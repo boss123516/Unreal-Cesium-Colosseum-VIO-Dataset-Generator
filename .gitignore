@@ -66,3 +66,36 @@ logs/
 **/*.code-workspace
 **/Makefile
 **/.ignore
+
+# External Unreal plugins
+sim/UCCVioDatasetSim/Plugins/CesiumForUnreal/
+
+# Colosseum / AirSim external Unreal plugin
+sim/UCCVioDatasetSim/Plugins/AirSim/
+
+# BEGIN UCC VIO generated artifacts
+.vscode/
+**/__pycache__/
+**/*.pyc
+
+# Unreal generated artifacts
+**/Binaries/
+**/DerivedDataCache/
+**/Intermediate/
+**/Saved/
+**/.vs/
+
+# Generated datasets and evaluation outputs
+datasets/
+validation_runs/
+output/
+logs/
+*.bag
+*.db3
+*.mcap
+.recording_incomplete
+# END UCC VIO generated artifacts
+sim/UCCVioDatasetSim/.backup_cesium_cam0_bridge_*/
+sim/UCCVioDatasetSim/cesium-request-cache.sqlite
+sim/UCCVioDatasetSim/cesium-request-cache.sqlite-shm
+sim/UCCVioDatasetSim/cesium-request-cache.sqlite-wal
