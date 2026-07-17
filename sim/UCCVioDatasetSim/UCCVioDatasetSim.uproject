@@ -1,0 +1,22 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "09894F68-FCB4-432D-9E16-7AACDD9345FF",
+	"Category": "",
+	"Description": "",
+	"Modules": [
+		{
+			"Name": "UCCVioDatasetSim",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ModelingToolsEditorMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		}
+	]
+}
