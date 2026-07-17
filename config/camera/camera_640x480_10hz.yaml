@@ -4,6 +4,6 @@ camera:
   width: 640
   height: 480
   frequency_hz: 10.0
-  fov_degrees: 90.0
+  fov_degrees: 45.0
   image_format: png
   timestamp_unit: nanoseconds
