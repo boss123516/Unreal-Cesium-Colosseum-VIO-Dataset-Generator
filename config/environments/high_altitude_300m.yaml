@@ -1,0 +1,10 @@
+environment:
+  name: high_altitude_300m
+  target_altitude_m: 300.0
+  tile_provider: cesium
+  maximum_screen_space_error: 8.0
+
+  georeference:
+    latitude_deg: null
+    longitude_deg: null
+    height_m: null

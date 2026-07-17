@@ -1,0 +1,6 @@
+imu:
+  name: Imu
+  frequency_hz: 100.0
+  angular_velocity_unit: rad_per_second
+  linear_acceleration_unit: meter_per_second_squared
+  timestamp_unit: nanoseconds

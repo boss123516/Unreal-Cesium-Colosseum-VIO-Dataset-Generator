@@ -1,0 +1,8 @@
+trajectory:
+  name: excitation
+  altitude_m: 300.0
+  nominal_speed_mps: 20.0
+  speed_variation_mps: 5.0
+  altitude_variation_m: 20.0
+  yaw_variation_deg: 15.0
+  duration_s: 120.0

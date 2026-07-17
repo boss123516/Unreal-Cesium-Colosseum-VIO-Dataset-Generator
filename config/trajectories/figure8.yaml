@@ -1,0 +1,7 @@
+trajectory:
+  name: figure8
+  altitude_m: 300.0
+  nominal_speed_mps: 20.0
+  scale_x_m: 200.0
+  scale_y_m: 100.0
+  duration_s: 120.0

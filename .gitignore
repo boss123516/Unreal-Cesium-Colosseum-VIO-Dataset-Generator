@@ -1,0 +1,63 @@
+# Credentials
+.env
+.env.*
+!.env.example
+*.token
+*.key
+*.pem
+*credentials*
+*api_key*
+*access_token*
+
+# Unreal generated directories
+**/Binaries/
+**/DerivedDataCache/
+**/Intermediate/
+**/Saved/
+**/.vs/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+
+# External engine source trees
+UE_*/
+UnrealEngine/
+external/UnrealEngine/
+
+# Generated external plugin files
+**/Plugins/*/Binaries/
+**/Plugins/*/Intermediate/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Generated datasets
+datasets/*
+!datasets/.gitkeep
+recordings/
+outputs/
+*.bag
+*.db3
+*.mcap
+
+# Downloaded map data and caches
+tile_cache/
+tiles/
+cache/
+
+# Logs
+logs/
+*.log
+
+# Editors and temporary files
+.vscode/
+.idea/
+*.swp
+*~
