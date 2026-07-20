@@ -47,7 +47,9 @@ Colosseum is an AirSim-compatible simulation layer providing:
 For the fixed-wing path, Colosseum runs `ExternalPhysicsEngine`: PX4/Gazebo
 produces the aircraft motion while the existing `cam0`, AirSim IMU model, RPC
 surface and dataset recorder remain in use. The current MVP tooling is under
-`tools/fixedwing/ucc_fixedwing_mvp_v1`.
+`tools/fixedwing/ucc_fixedwing_mvp_v1`. The complete implementation status,
+runtime procedure and troubleshooting guide are in
+`docs/FIXEDWING_INTEGRATION_STATUS.md`.
 
 The fixed-wing MVP has passed a 100-second native bridge gate and a synchronized
 30-second dataset gate with 300 camera frames, 3,000 IMU samples and 3,000
