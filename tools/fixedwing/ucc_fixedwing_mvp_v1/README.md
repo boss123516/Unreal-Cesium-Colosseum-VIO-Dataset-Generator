@@ -77,7 +77,13 @@ and chase camera.
 
 The profile selects `ExternalPhysicsEngine`, configures `Drone1/cam0` at
 640x480 with X=1.0 m and Pitch=-30 degrees, disables motion blur and zeros IMU
-noise for the integration gate. Restart Unreal after applying it.
+noise for the integration gate. The player viewport uses a fixed-wing-patched
+`SpringArmChase`: it follows aircraft yaw from behind while keeping roll and
+pitch independent so the horizon remains stable. Its default follow distance
+is 2 m so the RC Cessna remains large enough for bank, pitch and short-period
+angular motion to remain visible. Yaw remains apparent in the moving terrain
+without making the aircraft appear to fly backward. This does not change the
+body-mounted dataset `cam0`. Restart Unreal after applying it.
 
 To prove the UCC IMU path independently:
 

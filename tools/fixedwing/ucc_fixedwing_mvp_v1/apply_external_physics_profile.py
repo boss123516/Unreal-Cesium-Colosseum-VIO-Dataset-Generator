@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camera-forward-m", type=float, default=1.0)
     parser.add_argument("--camera-down-m", type=float, default=0.0)
     parser.add_argument("--camera-pitch-deg", type=float, default=-30.0)
+    parser.add_argument("--observer-follow-distance-m", type=int, default=-2)
     parser.add_argument("--no-backup", action="store_true")
     return parser.parse_args()
 
@@ -78,6 +79,13 @@ def main() -> int:
     data["PhysicsEngineName"] = "ExternalPhysicsEngine"
     data["RpcEnabled"] = True
     data.setdefault("ApiServerPort", 41451)
+    # The fixed-wing runtime patch turns SpringArmChase into a horizon-stable,
+    # heading-following observer without changing the body-mounted cam0.
+    data["ViewMode"] = "SpringArmChase"
+    camera_director = data.setdefault("CameraDirector", {})
+    if not isinstance(camera_director, dict):
+        raise SystemExit("[ERROR] settings.CameraDirector must be an object")
+    camera_director["FollowDistance"] = args.observer_follow_distance_m
 
     drone["VehicleType"] = "SimpleFlight"
     drone["AutoCreate"] = True
@@ -139,6 +147,11 @@ def main() -> int:
     output.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"[OK] fixed-wing {args.profile} profile written: {output}")
     print("[OK] PhysicsEngineName=ExternalPhysicsEngine, ClockSpeed=1.0")
+    print("[OK] ViewMode=SpringArmChase (fixed-wing observer patch enabled)")
+    print(
+        f"[OK] fixed-wing observer FollowDistance="
+        f"{args.observer_follow_distance_m} m"
+    )
     print(
         f"[OK] {args.camera} mount X={args.camera_forward_m:.3f} m, "
         f"Z={args.camera_down_m:.3f} m, Pitch={args.camera_pitch_deg:.1f} deg"

@@ -7,7 +7,7 @@
   "ApiServerPort": 41451,
   "ViewMode": "SpringArmChase",
   "CameraDirector": {
-    "FollowDistance": -6.0
+    "FollowDistance": -2.0
   },
   "Vehicles": {
     "Drone1": {

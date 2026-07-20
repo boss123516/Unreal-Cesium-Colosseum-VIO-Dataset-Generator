@@ -66,6 +66,45 @@ def patch_external_physics(path: Path) -> bool:
     return write_changed(path, replace_once(text, old, new, path.name))
 
 
+FIXED_WING_OBSERVER_BLOCK = r'''
+    if (msr::airlib::AirSimSettings::singleton().physics_engine_name == "ExternalPhysicsEngine") {
+        // Follow aircraft heading from behind while keeping the horizon stable.
+        // Roll and pitch remain visible instead of being cancelled by an
+        // identically rotating camera.
+        SpringArm->bInheritPitch = false;
+        SpringArm->bInheritYaw = true;
+        SpringArm->bInheritRoll = false;
+        SpringArm->bEnableCameraLag = false;
+        UE_LOG(
+            LogTemp,
+            Display,
+            TEXT("[FIXEDWING_OBSERVER] horizon-stable chase camera enabled"));
+    }
+'''
+
+
+def patch_camera_manager(path: Path) -> bool:
+    text = path.read_text(encoding="utf-8")
+    original = text
+    if '#include "common/AirSimSettings.hpp"' not in text:
+        text = replace_once(
+            text,
+            '#include "AirBlueprintLib.h"\n',
+            '#include "AirBlueprintLib.h"\n#include "common/AirSimSettings.hpp"\n',
+            f"{path.name} settings include",
+        )
+    if "[FIXEDWING_OBSERVER]" not in text:
+        anchor = """    manual_pose_controller_->initializeForPlay();
+"""
+        text = replace_once(
+            text,
+            anchor,
+            anchor + FIXED_WING_OBSERVER_BLOCK,
+            f"{path.name} observer setup",
+        )
+    return write_changed(path, text) if text != original else False
+
+
 def patch_flying_pawn_header(path: Path) -> bool:
     text = path.read_text(encoding="utf-8")
     original = text
@@ -332,6 +371,7 @@ def main() -> int:
     targets = {
         source / "AirLib/include/physics/PhysicsBody.hpp": patch_physics_body,
         source / "AirLib/include/physics/ExternalPhysicsEngine.hpp": patch_external_physics,
+        source / "CameraManager.cpp": patch_camera_manager,
         source / "Vehicles/Multirotor/FlyingPawn.h": patch_flying_pawn_header,
         source / "Vehicles/Multirotor/FlyingPawn.cpp": patch_flying_pawn_source,
         source / "PawnSimApi.cpp": patch_pawn_sim_api,
