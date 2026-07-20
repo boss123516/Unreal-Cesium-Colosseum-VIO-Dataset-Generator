@@ -44,6 +44,11 @@ Colosseum is an AirSim-compatible simulation layer providing:
 - IMU API
 - Ground Truth state API
 
+For the fixed-wing path, Colosseum runs `ExternalPhysicsEngine`: PX4/Gazebo
+produces the aircraft motion while the existing `cam0`, AirSim IMU model, RPC
+surface and dataset recorder remain in use. The current MVP tooling is under
+`tools/fixedwing/ucc_fixedwing_mvp_v1`.
+
 ### Project-owned components
 
 This repository will implement:

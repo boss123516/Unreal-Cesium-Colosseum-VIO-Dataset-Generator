@@ -1,0 +1,53 @@
+{
+  "SettingsVersion": 1.2,
+  "SimMode": "Multirotor",
+  "ClockSpeed": 1.0,
+  "PhysicsEngineName": "ExternalPhysicsEngine",
+  "RpcEnabled": true,
+  "ApiServerPort": 41451,
+  "ViewMode": "SpringArmChase",
+  "CameraDirector": {
+    "FollowDistance": -6.0
+  },
+  "Vehicles": {
+    "Drone1": {
+      "VehicleType": "SimpleFlight",
+      "AutoCreate": true,
+      "X": 0.0,
+      "Y": 0.0,
+      "Z": -400.0,
+      "Pitch": 0.0,
+      "Roll": 0.0,
+      "Yaw": 0.0,
+      "Cameras": {
+        "cam0": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.45,
+          "Pitch": -45.0,
+          "Roll": 0.0,
+          "Yaw": 0.0,
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 640,
+              "Height": 480,
+              "FOV_Degrees": 90.0,
+              "MotionBlurAmount": 0
+            }
+          ]
+        }
+      },
+      "Sensors": {
+        "Imu": {
+          "SensorType": 2,
+          "Enabled": true,
+          "AngularRandomWalk": 0.0,
+          "GyroBiasStability": 0.0,
+          "VelocityRandomWalk": 0.0,
+          "AccelBiasStability": 0.0
+        }
+      }
+    }
+  }
+}

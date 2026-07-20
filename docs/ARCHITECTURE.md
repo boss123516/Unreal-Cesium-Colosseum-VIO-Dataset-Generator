@@ -47,3 +47,26 @@ Responsibilities:
 - Frame conversion
 - Calibration export
 - Dataset validation
+
+## Fixed-wing external-physics path
+
+The fixed-wing MVP keeps Colosseum's camera, IMU, RPC and recorder layers but
+replaces SimpleFlight motion integration with PX4 and Gazebo:
+
+    PX4 fixed-wing control
+              |
+       Gazebo gz_rc_cessna
+              |
+       full kinematics state
+              |
+       UCC bridge and frames
+              |
+    Colosseum ExternalPhysicsEngine
+          /                 \
+    AirSim IMU          Unreal cam0
+
+The MVP source path consumes PX4 telemetry in local NED/body FRD and estimates
+acceleration by finite difference. The research path will consume Gazebo pose,
+twist and acceleration in world ENU/body FLU, apply the explicit basis change,
+and synchronize updates to simulation time. Gazebo remains the physics source
+of truth in both paths.
