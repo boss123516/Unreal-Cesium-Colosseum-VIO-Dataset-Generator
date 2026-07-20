@@ -65,8 +65,12 @@ replaces SimpleFlight motion integration with PX4 and Gazebo:
           /                 \
     AirSim IMU          Unreal cam0
 
-The MVP source path consumes PX4 telemetry in local NED/body FRD and estimates
-acceleration by finite difference. The research path will consume Gazebo pose,
-twist and acceleration in world ENU/body FLU, apply the explicit basis change,
-and synchronize updates to simulation time. Gazebo remains the physics source
-of truth in both paths.
+The validated source path uses a native Gazebo system plugin to publish pose,
+twist and direct link acceleration at 250 Hz in world ENU/body FLU. The bridge
+applies the explicit basis change, reanchors position and injects UCC at 100 Hz
+in world NED/body FRD. Gazebo is the physics source of truth; PX4 supplies the
+fixed-wing control surfaces and flight mode logic.
+
+Colosseum's built-in front-center SceneCapture is configured as the `cam0`
+alias for this path. This keeps the proven Cesium render path while preserving
+the dataset API name, resolution and fixed-wing camera mount.

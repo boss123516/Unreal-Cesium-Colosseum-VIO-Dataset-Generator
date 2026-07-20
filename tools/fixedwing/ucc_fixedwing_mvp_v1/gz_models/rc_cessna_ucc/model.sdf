@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="rc_cessna_ucc">
+    <include merge="true">
+      <uri>rc_cessna</uri>
+    </include>
+    <plugin
+      filename="libUccKinematicsPublisher.so"
+      name="ucc::sim::systems::KinematicsPublisher">
+      <link_name>base_link</link_name>
+      <topic>/ucc/fixed_wing/kinematics</topic>
+      <publish_rate_hz>250</publish_rate_hz>
+    </plugin>
+  </model>
+</sdf>

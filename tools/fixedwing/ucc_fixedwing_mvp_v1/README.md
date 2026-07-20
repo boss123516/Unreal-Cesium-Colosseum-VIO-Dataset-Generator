@@ -1,50 +1,85 @@
 # UCC fixed-wing MVP v1
 
-This package implements the first runtime gates from the 2026-07-20 fixed-wing
-execution plan without changing the validated quadrotor recorder.
+This package runs PX4 fixed-wing control and Gazebo Cessna dynamics as the
+physics source for UCC. A native Gazebo plugin publishes link kinematics at
+250 Hz, the bridge converts ENU/FLU to NED/FRD and injects UCC at 100 Hz, and
+the recorder writes synchronized 640x480 camera, IMU and ground truth data.
 
-## What is implemented
+## Validated result
 
-- read-only environment preflight;
-- minimal, backup-first `ExternalPhysicsEngine` settings update;
-- a no-noise IMU validation profile;
-- explicit ENU/FLU to NED/FRD vector and quaternion conversion;
-- a synthetic full-kinematics probe for AirSim ground truth and IMU;
-- offline frame-conversion unit tests.
+- Gazebo state: 250 Hz
+- UCC `simSetKinematics`: 100 Hz
+- camera: 640x480 at 10 Hz
+- IMU and ground truth: 100 Hz
+- fixed-wing visual: PX4 `rc_cessna` mesh imported into Unreal
+- 100-second live bridge: 10,000 injections, no deadline miss or RPC failure
+- 30-second mini dataset: 300 camera, 3,000 IMU and 3,000 GT samples, all gates pass
 
-The Unreal visual pawn and live Gazebo state source are deliberately gated on
-the synthetic IMU result. If this probe fails, inspect or patch the Colosseum
-sensor update path before expanding the bridge.
+The recorder warms `cam0` until three consecutive detailed Cesium frames are
+available. Recording never starts on AirSim's initial blank render target.
 
-## 1. Offline checks
+## 1. Preflight and Python dependencies
 
 ```bash
 cd tools/fixedwing/ucc_fixedwing_mvp_v1
-python3 -m unittest -v test_fixedwing_frames.py
 ./00_preflight.sh
+./03_install_bridge_python_deps.sh
 ```
 
-`AirSim RPC` is reported as a warning while Unreal Play/PIE is stopped. Missing
-PX4 or `gz` is a failure for Gate A but does not prevent the offline tests.
+`AirSim RPC` is only a warning while Unreal is stopped.
 
-## 2. Apply the synthetic validation profile
+## 2. Install PX4/Gazebo and build the native state plugin
 
-Stop Unreal Play/PIE before changing the profile.
+```bash
+./05_setup_px4_gazebo.sh
+./07_build_gazebo_kinematics_plugin.sh
+```
+
+The PX4 setup uses the official PX4 Ubuntu installer and may request the local
+sudo password. The validated versions are PX4 v1.17.0 and Gazebo Harmonic
+8.14.0.
+
+## 3. Patch/build the installed Colosseum plugin
+
+Install the external AirSim/Colosseum plugin into the Unreal project first,
+then stop Unreal and run:
+
+```bash
+./12_patch_build_colosseum_fixedwing.sh
+```
+
+The patch is idempotent. It adds the External Physics body lock that prevents
+the sensor-thread crash, reuses the proven built-in capture for the `cam0` API
+alias, hides the carrier pawn from sensor captures, and activates the Cessna
+visual in External Physics mode.
+
+Set `UCC_FIXEDWING_VISUAL=0` only for a visual A/B diagnostic. The normal path
+loads `/Game/FixedWing/SM_RCCessna`.
+
+## 4. Import the fixed-wing visual
+
+The imported Unreal assets are committed, so this step is only needed after
+changing the source FBX:
+
+```bash
+./10_import_fixedwing_visual.sh
+```
+
+The source is `assets/rc_cessna_body.fbx`. The runtime visual is collision-free
+and excluded from sensor SceneCapture while remaining visible to the player
+and chase camera.
+
+## 5. Apply the UCC profile
 
 ```bash
 ./01_apply_external_physics_profile.sh --profile validation
 ```
 
-The script preserves every existing camera, spawn, view and project-specific
-setting. It changes only the external-physics/RPC requirements and the IMU noise
-parameters needed for an axis test. The previous file is copied beside
-`settings.json` with a timestamped `backup.fixedwing_*` suffix.
+The profile selects `ExternalPhysicsEngine`, configures `Drone1/cam0` at
+640x480 with X=1.0 m and Pitch=-30 degrees, disables motion blur and zeros IMU
+noise for the integration gate. Restart Unreal after applying it.
 
-Restart Play/PIE after applying the profile. AirSim settings are not hot-loaded.
-
-## 3. Prove full kinematics reaches AirSim IMU
-
-With Play/PIE running:
+To prove the UCC IMU path independently:
 
 ```bash
 mkdir -p "$HOME/vio_sim_ws/artifacts/fixedwing_mvp/synthetic_gate"
@@ -52,93 +87,76 @@ mkdir -p "$HOME/vio_sim_ws/artifacts/fixedwing_mvp/synthetic_gate"
   --output "$HOME/vio_sim_ws/artifacts/fixedwing_mvp/synthetic_gate/imu_validation.json"
 ```
 
-The probe injects and verifies four conditions:
+## 6. Start the fixed-wing simulation
 
-1. static gyro near zero and accelerometer norm near gravity;
-2. body-X angular rate appears on AirSim gyro X;
-3. world-NED-X acceleration produces the expected body-X accelerometer delta;
-4. `simGetGroundTruthKinematics()` returns the injected acceleration.
-
-The original kinematics state is restored in a `finally` block. Run this only
-with `ExternalPhysicsEngine`; the script refuses any other runtime engine.
-
-## 4. Install the MAVLink bridge dependency
+Start UCC on `HighAltitudeCity`, wait for AirSim RPC port 41451, then start
+PX4/Gazebo in a second terminal:
 
 ```bash
-./03_install_bridge_python_deps.sh
+./08_run_gz_rc_cessna_ucc.sh
 ```
 
-The pinned `pymavlink` version matches the version selected by the PX4 v1.17.0
-setup requirements at the time this package was created.
-
-## 5. Install Gazebo and run the Cessna-only gate
-
-The official PX4 Ubuntu setup installs system packages and therefore requires
-the local user's sudo password:
+Start the native bridge in a third terminal:
 
 ```bash
-./05_setup_px4_gazebo.sh
+./09_run_gazebo_airsim_bridge.sh \
+  --duration-sec 100 \
+  --summary "$HOME/vio_sim_ws/artifacts/fixedwing_mvp/bridge_summary.json" \
+  --state-log "$HOME/vio_sim_ws/artifacts/fixedwing_mvp/bridge_state.csv"
 ```
 
-Restart the machine if the PX4 setup script requests it. Then run:
+After PX4 reports `Ready for takeoff`, enter these commands at the `pxh>`
+prompt:
+
+```text
+commander arm
+commander takeoff
+```
+
+The bridge sends the GCS heartbeat required for unattended PX4 preflight and
+stops on stale Gazebo state, invalid state, timestamp regression, repeated UCC
+RPC failure or the requested duration.
+
+## 7. Record the 30-second mini dataset
+
+While the aircraft and bridge are running:
 
 ```bash
-./06_run_gz_rc_cessna.sh
+./11_run_fixedwing_mini_dataset.sh \
+  --output "$HOME/vio_sim_ws/artifacts/fixedwing_mvp/mini_dataset" \
+  --duration-sec 30
 ```
 
-Set `HEADLESS=1` in the environment for a server-only check. Gate A still
-requires a later visual or telemetry check that the plane can sustain controlled
-forward flight.
+Success removes `.recording_incomplete` and writes `timing_report.json` with
+`all_pass: true`. The output uses an EuRoC-like `mav0/cam0`, `mav0/imu0` and
+`mav0/state_groundtruth_estimate0` layout.
 
-## 6. Run the PX4-to-AirSim MVP bridge
-
-Start `gz_rc_cessna` and UCC External Physics first. Then run:
+## 8. Tests
 
 ```bash
-RUN_DIR="$HOME/vio_sim_ws/artifacts/fixedwing_mvp/bridge_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$RUN_DIR"
-./04_run_px4_airsim_bridge.sh \
-  --mavlink udpin:0.0.0.0:14540 \
-  --duration-sec 30 \
-  --summary "$RUN_DIR/bridge_summary.json" \
-  --state-log "$RUN_DIR/bridge_state.csv"
+export PYTHONPATH="/usr/lib/python3/dist-packages:$HOME/vio_sim_ws/Colosseum/PythonClient"
+"$HOME/vio_sim_ws/airsim_pyenv/bin/python" -m unittest discover \
+  -s . -p 'test_*.py' -v
 ```
-
-PX4 telemetry is already NED/FRD, so this source path does not apply the
-Gazebo ENU/FLU conversion. Acceleration is a low-pass-filtered finite
-difference for MVP response testing. It is explicitly marked as unsuitable for
-the final research dataset; the deterministic bridge must consume acceleration
-from Gazebo physics directly.
-
-The bridge terminates when source state age exceeds 0.5 seconds, after five
-consecutive AirSim RPC failures, or on invalid runtime configuration. Its
-summary includes source/injection rates, latency, drops, timestamp regressions,
-invalid values and RPC failures. It also emits a 1 Hz MAVLink GCS heartbeat so
-PX4 remains preflight-ready during an unattended bridge run.
-
-## 7. Restore runtime sensor noise
-
-After the frame and gravity checks pass, restore the known-good quad settings
-backup or apply the external physics profile without changing existing IMU noise:
-
-```bash
-./01_apply_external_physics_profile.sh --profile runtime
-```
-
-If the current file already contains the zero-noise validation values, restore
-the pre-validation backup first; the runtime profile intentionally preserves
-whatever IMU values exist in its input.
 
 ## Frame contract
 
-The conversion module accepts Gazebo state fields with these frames:
+The Gazebo plugin publishes this ordered `gz.msgs.Double_V` contract:
 
 ```text
-position, linear velocity, linear acceleration: world ENU
-orientation: body FLU -> world ENU, quaternion xyzw
-angular velocity, angular acceleration: body FLU
+version, simulation timestamp,
+position ENU,
+body-FLU to world-ENU quaternion xyzw,
+linear velocity ENU,
+angular velocity FLU,
+linear acceleration ENU,
+angular acceleration FLU
 ```
 
-It outputs the AirSim equivalent in world NED and body FRD. If a selected Gazebo
-topic publishes angular velocity in world coordinates, convert it as an ENU
-world vector before using the bridge contract; do not feed it to the FLU helper.
+The bridge outputs world NED/body FRD and reanchors the first received Gazebo
+position to the UCC spawn origin. Linear acceleration comes directly from the
+Gazebo link component; it is not a finite difference and does not duplicate
+gravity.
+
+`04_run_px4_airsim_bridge.sh` remains as the earlier MAVLink MVP path. Use the
+native `08` + `09` path for dataset generation.

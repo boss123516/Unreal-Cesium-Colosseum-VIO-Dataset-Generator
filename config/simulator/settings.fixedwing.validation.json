@@ -21,10 +21,10 @@
       "Yaw": 0.0,
       "Cameras": {
         "cam0": {
-          "X": 0.0,
+          "X": 1.0,
           "Y": 0.0,
-          "Z": 0.45,
-          "Pitch": -45.0,
+          "Z": 0.0,
+          "Pitch": -30.0,
           "Roll": 0.0,
           "Yaw": 0.0,
           "CaptureSettings": [

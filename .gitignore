@@ -19,6 +19,7 @@
 *.suo
 *.opensdf
 *.sdf
+!tools/fixedwing/ucc_fixedwing_mvp_v1/gz_models/rc_cessna_ucc/model.sdf
 *.VC.db
 
 # External engine source trees

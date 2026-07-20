@@ -49,6 +49,10 @@ produces the aircraft motion while the existing `cam0`, AirSim IMU model, RPC
 surface and dataset recorder remain in use. The current MVP tooling is under
 `tools/fixedwing/ucc_fixedwing_mvp_v1`.
 
+The fixed-wing MVP has passed a 100-second native bridge gate and a synchronized
+30-second dataset gate with 300 camera frames, 3,000 IMU samples and 3,000
+ground-truth samples. See `docs/FIXEDWING_MVP_STATUS_2026-07-20.md`.
+
 ### Project-owned components
 
 This repository will implement:

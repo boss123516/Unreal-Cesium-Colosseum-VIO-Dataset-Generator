@@ -1,112 +1,119 @@
-# Fixed-wing MVP status — 2026-07-20
+# Fixed-wing integration status
 
 ## Outcome
 
-The fixed-wing kinematics MVP is a **Go**. PX4 v1.17.0 and Gazebo Harmonic
-8.14.0 run the `gz_rc_cessna` dynamics, and the Python bridge injects PX4
-NED/FRD state into the UCC `ExternalPhysicsEngine` at 100 Hz. The injected
-ground truth reaches both AirSim IMU and camera motion in the current UE 5.6 /
-Colosseum 2.3.0 runtime. A Colosseum C++ adapter is not required for this MVP.
+The fixed-wing integration MVP is complete on branch `fixed_wing`. PX4 v1.17.0
+and Gazebo Harmonic 8.14.0 run the `gz_rc_cessna` dynamics, a native Gazebo
+plugin publishes direct link kinematics, and the UCC bridge injects converted
+state into Colosseum `ExternalPhysicsEngine` at 100 Hz.
 
-The remaining work is dataset hardening: direct Gazebo acceleration instead of
-finite differences, a fixed-wing Unreal visual pawn, explicit bank/axis visual
-checks, and the 30-second mini-dataset timing and quality gate.
+The final no-wind/no-noise 30-second mini dataset passed its camera, IMU,
+ground-truth, timestamp, quaternion and content gates.
 
-## Completed
+## Implemented path
 
-- Preserved UCC baseline commit `4f7e01f` and created
-  `feature/fixedwing-integration-20260720`.
-- Backed up the quadrotor AirSim settings and applied an External Physics,
-  no-noise validation profile.
-- Installed Gazebo Harmonic 8.14.0 with the official PX4 Ubuntu setup.
-- Cloned and built PX4 v1.17.0 at `$HOME/PX4-Autopilot`.
-- Spawned `rc_cessna_0` with airframe `SYS_AUTOSTART=4003` and verified valid
-  PX4 position, velocity and attitude estimates.
-- Added and tested ENU/FLU to NED/FRD vector and quaternion conversion.
-- Implemented the PX4 MAVLink to AirSim full-kinematics MVP bridge, including a
-  1 Hz GCS heartbeat required for unattended PX4 preflight readiness.
-- Added source timeout, invalid-state, quaternion, timestamp, duplicate, drop,
-  latency and RPC-failure accounting.
-- Proved automatic takeoff and controlled forward flight while the bridge drove
-  live UCC ground truth, IMU and camera motion.
+```text
+PX4 fixed-wing controller
+        |
+Gazebo rc_cessna dynamics
+        |
+UccKinematicsPublisher, 250 Hz ENU/FLU
+        |
+gazebo_airsim_bridge.py, 100 Hz NED/FRD
+        |
+Colosseum ExternalPhysicsEngine
+        |----------------------|
+ AirSim IMU/GT          Unreal/Cesium cam0
+```
+
+Implemented components:
+
+- native Gazebo `gz::sim::System` link-state publisher;
+- explicit 21-field transport contract and validation;
+- ENU/FLU to NED/FRD conversion and first-state reanchoring;
+- direct Gazebo linear and angular acceleration consumption;
+- 1 Hz MAVLink GCS heartbeat for PX4 readiness;
+- UCC injection rate, source age, latency, deadline, timestamp and RPC gates;
+- `PhysicsBody` scoped lock in `ExternalPhysicsEngine` to prevent concurrent
+  sensor/update access and the observed `SensorCollection` crash;
+- fixed-wing Unreal Cessna visual with quad components hidden;
+- built-in front-center SceneCapture reused as the `cam0` alias because
+  runtime-spawned `BP_PIPCamera` Scene RGB captures remain blank in this map;
+- camera warm-up gate requiring three consecutive detailed 640x480 frames;
+- synchronized 10 Hz camera and 100 Hz IMU/ground-truth mini recorder;
+- idempotent Colosseum source patch and UE rebuild script.
 
 ## Runtime evidence
 
-Synthetic UCC runtime gate:
+### Synthetic UCC IMU gate
 
-| Test | Injection | AirSim IMU result | Status |
+| Test | Injection | AirSim result | Status |
 |---|---:|---:|---|
 | Static acceleration norm | 0 world acceleration | 9.806650 m/s² | Pass |
 | Body X gyro | 0.1 rad/s | 0.1000000015 rad/s | Pass |
 | World/body X acceleration delta | 1.0 m/s² | 1.0 m/s² | Pass |
 | Ground-truth round trip | 1.0 m/s² | 1.0 m/s² | Pass |
 
-Actual PX4/Gazebo Cessna to live UCC stationary gate:
+### Native automatic-takeoff stability gate
 
 | Metric | Result |
 |---|---:|
-| Duration / injections | 20.0 s / 2,000 |
-| Source / AirSim RPC injection rate | 99.999 / 99.999 Hz |
-| Mean / p95 / max receive-to-inject latency | 2.20 / 3.67 / 4.83 ms |
-| Dropped states | 0 |
-| Timestamp regressions | 0 |
-| Invalid quaternion/numeric states | 0 / 0 |
+| Duration / UCC injections | 75 s / 7,500 |
+| Gazebo source / UCC rate | 250 Hz / 100 Hz |
+| Receive-to-inject p95 latency | 2.80 ms |
+| Deadline miss / timestamp regression / RPC failure | 0 / 0 / 0 |
+| Maximum displacement | 162.487 m |
+| Maximum horizontal speed | 14.513 m/s |
+| Maximum relative altitude | 33.929 m |
+| Final CSV-to-UCC GT position error | 0.00000732 m |
+
+PX4 reported `Ready for takeoff` and `Takeoff detected`. UCC remained stable
+beyond the prior crash point.
+
+### Final native bridge gate
+
+| Metric | Result |
+|---|---:|
+| Duration | 100.000 s |
+| Gazebo states | 25,001 |
+| UCC injections | 10,000 |
+| Gazebo source rate | 249.9997 Hz |
+| UCC injection rate | 99.9999 Hz |
+| Mean / p95 latency | 1.617 / 2.658 ms |
+| Missed deadlines | 0 |
+| Duplicate/regressed/invalid states | 0 |
 | RPC failures | 0 |
 
-Actual automatic-takeoff and forward-flight gate:
+### Final 30-second mini dataset
 
 | Metric | Result |
 |---|---:|
-| Duration / AirSim RPC injections | 45.0 s / 4,500 |
-| Source / AirSim RPC injection rate | 100.044 / 99.9998 Hz |
-| Mean / p95 / max receive-to-inject latency | 4.32 / 5.54 / 6.96 ms |
-| Dropped states | 1 at startup |
-| Timestamp regressions / invalid values / RPC failures | 0 / 0 / 0 |
-| Maximum displacement | 151.65 m |
-| Maximum horizontal / 3D speed | 13.73 / 14.47 m/s |
-| Maximum relative altitude | 34.41 m |
+| Camera | 300 / 300, 640x480, 10 Hz |
+| IMU | 3,000 / 3,000, 100 Hz |
+| Ground truth | 3,000 / 3,000, 100 Hz |
+| Blank frames / maximum white ratio | 0 / 0.0 |
+| Timestamp duplicates / regressions | 0 / 0 |
+| Camera source period mean / p95 | 99.333 / 108.002 ms |
+| IMU source period mean / p95 | 9.931 / 12.000 ms |
+| Maximum quaternion norm error | 4.12e-8 |
+| Motion displacement / max horizontal speed | 160.928 m / 14.554 m/s |
+| Recorder errors | 0 |
 
-PX4 reported `Ready for takeoff`, `Preflight check: OK`, and `Takeoff
-detected`. During the sampled flight its local position was approximately
-`[-12.23, 141.03, -30.44] m` with about `13.0 m/s` horizontal speed, a valid
-heading solution, and no active failsafe.
+Validated artifacts are outside Git under:
 
-The final dynamic bridge row and UCC `simGetGroundTruthKinematics()` agreed for
-position, orientation, velocity, angular velocity and acceleration within
-float serialization precision. AirSim IMU angular velocity also matched the
-injected ground truth. The live scene camera returned a valid 256x144 RGB frame
-with standard deviation 33.70 and zero pixels above the all-white threshold,
-so the earlier standalone white-frame smoke result is no longer reproduced.
-
-Artifacts:
-
-- `artifacts/fixedwing_mvp/synthetic_gate/imu_validation_20260720.json`
-- `artifacts/fixedwing_mvp/px4_cessna_live_bridge/summary.json`
-- `artifacts/fixedwing_mvp/px4_cessna_live_bridge/state.csv`
-- `artifacts/fixedwing_mvp/px4_cessna_takeoff_bridge/summary.json`
-- `artifacts/fixedwing_mvp/px4_cessna_takeoff_bridge/state.csv`
-
-## Open gates
-
-1. Consume linear and angular acceleration directly from Gazebo physics rather
-   than finite-difference PX4 telemetry.
-2. Run explicit one-axis and banked-turn visual checks and save their evidence.
-3. Create or select a fixed-wing Unreal pawn/mesh and validate camera occlusion.
-4. Restore the intended runtime IMU-noise profile and record the 30-second
-   no-wind/no-noise camera/IMU/ground-truth mini dataset.
-5. Validate timestamp alignment, frame counts and data quality before extending
-   to the 180-second research scenario.
+```text
+$HOME/vio_sim_ws/artifacts/fixedwing_mvp/final_bridge_summary.json
+$HOME/vio_sim_ws/artifacts/fixedwing_mvp/final_bridge_state.csv
+$HOME/vio_sim_ws/artifacts/fixedwing_mvp/mini_dataset_pass/
+```
 
 ## Reproduction
 
-From `tools/fixedwing/ucc_fixedwing_mvp_v1`, run PX4/Gazebo and UCC first, then:
+Use `tools/fixedwing/ucc_fixedwing_mvp_v1/README.md`. The required runtime path
+is `08_run_gz_rc_cessna_ucc.sh`, `09_run_gazebo_airsim_bridge.sh`, PX4
+`commander arm` / `commander takeoff`, and
+`11_run_fixedwing_mini_dataset.sh`.
 
-```bash
-RUN_DIR="$HOME/vio_sim_ws/artifacts/fixedwing_mvp/live_bridge_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$RUN_DIR"
-./04_run_px4_airsim_bridge.sh \
-  --mavlink udpin:0.0.0.0:14540 \
-  --duration-sec 30 \
-  --summary "$RUN_DIR/bridge_summary.json" \
-  --state-log "$RUN_DIR/bridge_state.csv"
-```
+The external AirSim plugin is intentionally ignored by repository policy.
+`12_patch_build_colosseum_fixedwing.sh` applies the project-owned runtime
+changes and rebuilds the plugin after Colosseum installation.

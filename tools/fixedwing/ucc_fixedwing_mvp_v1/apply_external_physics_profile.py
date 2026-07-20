@@ -33,6 +33,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vehicle", default="Drone1")
     parser.add_argument("--camera", default="cam0")
     parser.add_argument("--imu", default="Imu")
+    parser.add_argument("--camera-forward-m", type=float, default=1.0)
+    parser.add_argument("--camera-down-m", type=float, default=0.0)
+    parser.add_argument("--camera-pitch-deg", type=float, default=-30.0)
     parser.add_argument("--no-backup", action="store_true")
     return parser.parse_args()
 
@@ -65,7 +68,7 @@ def main() -> int:
     vehicles = require_mapping(data, "Vehicles", "settings")
     drone = require_mapping(vehicles, args.vehicle, "settings.Vehicles")
     cameras = require_mapping(drone, "Cameras", f"Vehicles.{args.vehicle}")
-    require_mapping(cameras, args.camera, f"Vehicles.{args.vehicle}.Cameras")
+    camera = require_mapping(cameras, args.camera, f"Vehicles.{args.vehicle}.Cameras")
     sensors = require_mapping(drone, "Sensors", f"Vehicles.{args.vehicle}")
     imu = require_mapping(sensors, args.imu, f"Vehicles.{args.vehicle}.Sensors")
 
@@ -78,6 +81,41 @@ def main() -> int:
 
     drone["VehicleType"] = "SimpleFlight"
     drone["AutoCreate"] = True
+    camera.update(
+        {
+            "X": args.camera_forward_m,
+            "Y": 0.0,
+            "Z": args.camera_down_m,
+            "Pitch": args.camera_pitch_deg,
+            "Roll": 0.0,
+            "Yaw": 0.0,
+        }
+    )
+    capture_settings = camera.setdefault("CaptureSettings", [])
+    if not isinstance(capture_settings, list):
+        raise SystemExit(
+            f"[ERROR] Vehicles.{args.vehicle}.Cameras.{args.camera}.CaptureSettings "
+            "must be an array"
+        )
+    scene_capture = next(
+        (
+            item
+            for item in capture_settings
+            if isinstance(item, dict) and item.get("ImageType", 0) == 0
+        ),
+        None,
+    )
+    if scene_capture is None:
+        scene_capture = {"ImageType": 0}
+        capture_settings.append(scene_capture)
+    scene_capture.update(
+        {
+            "Width": 640,
+            "Height": 480,
+            "FOV_Degrees": 90.0,
+            "MotionBlurAmount": 0,
+        }
+    )
     imu["SensorType"] = 2
     imu["Enabled"] = True
 
@@ -101,6 +139,11 @@ def main() -> int:
     output.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"[OK] fixed-wing {args.profile} profile written: {output}")
     print("[OK] PhysicsEngineName=ExternalPhysicsEngine, ClockSpeed=1.0")
+    print(
+        f"[OK] {args.camera} mount X={args.camera_forward_m:.3f} m, "
+        f"Z={args.camera_down_m:.3f} m, Pitch={args.camera_pitch_deg:.1f} deg"
+    )
+    print(f"[OK] {args.camera} Scene capture=640x480, FOV=90 deg, motion blur=0")
     if args.profile == "validation":
         print("[OK] AirSim IMU random walk and bias stability disabled for axis tests")
     print("[IMPORTANT] Stop and restart Unreal Play/PIE before running the probe.")
