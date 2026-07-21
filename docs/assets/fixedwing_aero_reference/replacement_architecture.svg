@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="700" viewBox="0 0 1400 700">
+  <defs>
+    <style>
+      text { font-family: 'Noto Sans CJK KR', sans-serif; fill: #132238; }
+      .title { font-size: 32px; font-weight: 700; }
+      .boxTitle { font-size: 23px; font-weight: 700; }
+      .body { font-size: 18px; }
+      .keep { fill: #e8f1fb; stroke: #2d6fb5; stroke-width: 3; }
+      .replace { fill: #fff1df; stroke: #df7e16; stroke-width: 4; }
+      .validate { fill: #e6f6ed; stroke: #29945c; stroke-width: 3; }
+      .arrow { stroke: #40546e; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #df7e16; stroke-width: 3; stroke-dasharray: 10 8; fill: none; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#40546e"/>
+    </marker>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <rect width="1400" height="700" fill="#f7f9fc"/>
+  <text x="55" y="62" class="title">한화 고정익 데이터 적용 경계 — 유지할 틀과 교체할 모델</text>
+
+  <g filter="url(#shadow)">
+    <rect x="55" y="135" rx="18" ry="18" width="250" height="160" class="keep"/>
+    <text x="80" y="178" class="boxTitle">PX4 제어기</text>
+    <text x="80" y="215" class="body">자세·속도·항법 제어</text>
+    <text x="80" y="246" class="body">Control Allocation</text>
+    <text x="80" y="277" class="body">servo / motor 출력</text>
+
+    <rect x="385" y="105" rx="18" ry="18" width="330" height="220" class="replace"/>
+    <text x="415" y="150" class="boxTitle">교체 ① 기체 물성·형상</text>
+    <text x="415" y="188" class="body">질량, CG, 관성 텐서</text>
+    <text x="415" y="220" class="body">S, b, MAC, AR, CP/AC</text>
+    <text x="415" y="252" class="body">충돌·시각 메시, 조종면 위치</text>
+    <text x="415" y="284" class="body">조종면 각도·속도 제한</text>
+
+    <rect x="790" y="105" rx="18" ry="18" width="330" height="220" class="replace"/>
+    <text x="820" y="150" class="boxTitle">교체 ② 공력·추진 모델</text>
+    <text x="820" y="188" class="body">CL/CD/CM 및 stall polar</text>
+    <text x="820" y="220" class="body">β, p, q, r 안정미계수</text>
+    <text x="820" y="252" class="body">조종면 effectiveness</text>
+    <text x="820" y="284" class="body">추력·토크·RPM 맵</text>
+
+    <rect x="1195" y="135" rx="18" ry="18" width="160" height="160" class="keep"/>
+    <text x="1223" y="178" class="boxTitle">Gazebo</text>
+    <text x="1223" y="215" class="body">6-DoF 적분</text>
+    <text x="1223" y="246" class="body">센서 생성</text>
+    <text x="1223" y="277" class="body">250 Hz 상태</text>
+  </g>
+
+  <path d="M305 215 L380 215" class="arrow"/>
+  <path d="M715 215 L785 215" class="arrow"/>
+  <path d="M1120 215 L1190 215" class="arrow"/>
+
+  <path d="M550 340 L550 392 L955 392 L955 340" class="dash"/>
+  <text x="654" y="425" class="boxTitle" fill="#b76008">한화 제공 데이터가 들어오는 핵심 교체 구간</text>
+
+  <g filter="url(#shadow)">
+    <rect x="160" y="500" rx="18" ry="18" width="270" height="135" class="keep"/>
+    <text x="190" y="544" class="boxTitle">UCC 상태 브리지</text>
+    <text x="190" y="582" class="body">좌표계 변환·100 Hz 주입</text>
+    <text x="190" y="613" class="body">기체 교체 시 유지</text>
+
+    <rect x="565" y="500" rx="18" ry="18" width="270" height="135" class="keep"/>
+    <text x="595" y="544" class="boxTitle">Unreal / Cesium</text>
+    <text x="595" y="582" class="body">외형·지형·카메라 렌더</text>
+    <text x="595" y="613" class="body">시각 메시만 교체</text>
+
+    <rect x="970" y="500" rx="18" ry="18" width="270" height="135" class="validate"/>
+    <text x="1000" y="544" class="boxTitle">VIO 데이터셋</text>
+    <text x="1000" y="582" class="body">cam0·IMU·GT 기록</text>
+    <text x="1000" y="613" class="body">동일 계약으로 재검증</text>
+  </g>
+
+  <path d="M1275 300 C1275 430 420 420 300 495" class="arrow"/>
+  <path d="M430 567 L560 567" class="arrow"/>
+  <path d="M835 567 L965 567" class="arrow"/>
+
+  <g transform="translate(55,670)">
+    <rect x="0" y="-22" width="24" height="24" class="keep"/><text x="36" y="-3" class="body">기존 프레임워크 유지</text>
+    <rect x="260" y="-22" width="24" height="24" class="replace"/><text x="296" y="-3" class="body">한화 데이터로 교체</text>
+    <rect x="535" y="-22" width="24" height="24" class="validate"/><text x="571" y="-3" class="body">교체 후 검증</text>
+  </g>
+</svg>

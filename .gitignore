@@ -100,3 +100,6 @@ sim/UCCVioDatasetSim/.backup_cesium_cam0_bridge_*/
 sim/UCCVioDatasetSim/cesium-request-cache.sqlite
 sim/UCCVioDatasetSim/cesium-request-cache.sqlite-shm
 sim/UCCVioDatasetSim/cesium-request-cache.sqlite-wal
+
+# Local Cesium ion server settings can contain machine-specific credentials.
+sim/UCCVioDatasetSim/Content/CesiumSettings/

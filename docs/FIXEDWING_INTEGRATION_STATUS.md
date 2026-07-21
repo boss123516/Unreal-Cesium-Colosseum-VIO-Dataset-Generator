@@ -16,9 +16,15 @@ Colosseum 센서 계층에 연결하는 통합 MVP를 완료했다.
 - 100 Hz IMU 및 Ground Truth 기록
 - 카메라, IMU, GT 타임스탬프 및 품질 검증
 - 고정익 전용 후방 관찰 카메라
+- 500 m 로컬 고도에서 19 m/s 좌·우 S-turn 180초 Dataset 3 자동 생성
 
 검증 범위는 **무풍, IMU 노이즈 비활성, PX4 기본 Cessna 파라미터**를 사용한
 통합 MVP이다. 실제 난류, 돌풍, 센서 노이즈 및 기체별 공력 튜닝은 다음 단계다.
+
+처음 구조를 파악할 때는 다음 문서를 먼저 읽는다.
+
+- [PX4–Gazebo–Colosseum 파이프라인과 Dataset 3 인수인계](FIXEDWING_PX4_GAZEBO_PIPELINE_HANDOVER_2026-07-21.md)
+- [Gazebo 고정익 기체·공력 모델 기준서](FIXEDWING_AERODYNAMIC_MODEL_REFERENCE.md)
 
 ## 2. 브랜치와 커밋
 
@@ -36,8 +42,8 @@ fixed_wing
 | `488ebb0` | PX4/Gazebo 네이티브 상태 브리지와 데이터셋 통합 완료 |
 | `1e1a703` | 수평 안정형 고정익 후방 추적 카메라 추가 |
 
-`sim/UCCVioDatasetSim/Content/CesiumSettings/`는 로컬 Cesium 설정이므로 위
-고정익 커밋에 포함하지 않았다.
+`sim/UCCVioDatasetSim/Content/CesiumSettings/`는 machine-specific Cesium
+설정과 credential을 포함할 수 있는 로컬 자산이므로 Git에서 제외한다.
 
 ## 3. 시스템 구성
 
@@ -122,7 +128,8 @@ angular acceleration FLU
 
 - External Physics 모드에서 기존 쿼드콥터 Body와 Prop 메시를 숨긴다.
 - `/Game/FixedWing/SM_RCCessna` 정적 메시를 Pawn 루트에 부착한다.
-- FBX 축을 AirSim/Unreal body 축에 맞추는 고정 회전을 적용한다.
+- FBX의 기수는 이미 body `+X`를 향한다. Y-up만 Unreal Z-up으로 바꾸도록
+  `FRotator(0, 0, 90)`을 적용하며 Yaw 180도 회전은 사용하지 않는다.
 - 시각 메시에는 충돌을 사용하지 않는다.
 - 데이터셋 SceneCapture에서는 기체를 숨겨 `cam0` 자기 가림을 방지한다.
 - 플레이어 관찰 화면에서는 Cessna가 보인다.
@@ -165,7 +172,7 @@ Yaw 상속까지 끄면 카메라가 월드 한 방향에 고정되어 기체가
 
 ### 6.1 단위 및 빌드 검사
 
-- 고정익 Python 단위 테스트: 22개 통과
+- 고정익 및 Dataset 3 Python 단위 테스트: 전체 통과
 - Python 문법 컴파일: 통과
 - JSON 문법 검사: 통과
 - 패치 반복 적용: 통과
@@ -219,6 +226,42 @@ Yaw 상속까지 끄면 카메라가 월드 한 방향에 고정되어 기체가
 - 지평선이 기체 Roll/Pitch와 함께 회전하지 않음
 - 실제 상태 범위: Roll 약 28.9 deg, Pitch 약 34.6 deg
 - 90초 브리지 실행 `all_pass: true`, RPC 실패 0
+
+2026-07-21 화면 녹화 재확인에서 후방 카메라는 정상인데 Unreal 시각 메시만
+기수와 꼬리가 180도 반대로 표시되는 문제를 확인했다. FBX 자체는 기수가 `+X`인
+데 런타임 패치가 시각 메시를 Yaw 180도 추가 회전한 것이 원인이었다.
+`FRotator(0, 180, 90)`을 `FRotator(0, 0, 90)`으로 수정하고 기존 설치본도
+자동 마이그레이션하도록 패처와 회귀 테스트를 보완했다. 플러그인 재빌드 후
+Unreal 실제 비행 화면에서 기수·꼬리 방향이 정상인 것을 직접 확인했다.
+
+### 6.4 500 m Dataset 3 최종 검증
+
+PX4 mission으로 19 m/s 직진과 완만한 좌·우 S-turn을 수행하고, Unreal
+PlayerStart 기준 500 m 로컬 고도에서 180초 동안 Camera/IMU/GT를 기록했다.
+
+| 지표 | 결과 |
+|---|---:|
+| Camera | 1,800 / 1,800, 640x480, 10 Hz |
+| IMU / GT | 각 18,000 / 18,000, 100 Hz |
+| Camera 최대 source gap | 165.004 ms |
+| Camera–GT 최대 source skew | 135.003 ms |
+| 로컬 고도 min / mean / max | 483.039 / 497.183 / 511.836 m |
+| 수평속도 max | 19.500 m/s |
+| Roll min / max | -23.297 / +28.374 deg |
+| 좌선회 / 우선회 / 직진 | 모두 통과 |
+| 최종 판정 | `all_pass: true` |
+
+Gazebo source는 249.9985 Hz, AirSim 주입은 100.0017 Hz였고 deadline miss,
+timestamp regression, invalid state와 RPC failure는 모두 0이었다. 250 Hz 입력 중
+100 Hz 주입 전에 더 최신 상태로 교체된 항목은 `superseded_source_states`로
+계수하며 패킷 손실이 아니다.
+
+최종 산출물은 Git 밖의 다음 경로에 있다.
+
+```text
+$HOME/vio_sim_ws/datasets/ucc_fixedwing_dataset3_500m_20260721_172929/
+$HOME/vio_sim_ws/datasets/fixed_wing_datasets_v1.zip
+```
 
 카메라 검증 런은 PX4/Gazebo 소스가 준비되기 전에 브리지를 먼저 실행한 초기
 대기 시간을 통계에 포함했다. 성능 기준값은 초기 대기를 제외해 250/100 Hz를
@@ -373,8 +416,10 @@ cd /home/boss/research/Unreal-Cesium-Colosseum-VIO-Dataset-Generator
 
 ### 카메라에서 기체가 후진하는 것처럼 보임
 
-고정익 카메라 패치가 적용되지 않은 설치본이거나 Yaw 비추종 구성이 남아 있을
-수 있다. Unreal을 종료한 뒤 다음을 실행하고 다시 시작한다.
+먼저 기체의 진행 방향은 맞지만 외형의 기수와 꼬리만 반대인지 확인한다. 이 경우
+설치된 `FlyingPawn.cpp`에 과거 시각 메시 회전 `FRotator(0, 180, 90)`이 남은
+것이 원인이다. 기체 전체가 화면 앞이나 옆에서 보이면 카메라 Yaw 비추종 구성이
+남은 경우다. 두 경우 모두 Unreal을 종료한 뒤 다음을 실행하고 다시 시작한다.
 
 ```bash
 ./tools/fixedwing/ucc_fixedwing_mvp_v1/12_patch_build_colosseum_fixedwing.sh
@@ -395,6 +440,9 @@ cd /home/boss/research/Unreal-Cesium-Colosseum-VIO-Dataset-Generator
 | `tools/fixedwing/ucc_fixedwing_mvp_v1/11_run_fixedwing_mini_dataset.sh` | 미니 데이터셋 기록 |
 | `tools/fixedwing/ucc_fixedwing_mvp_v1/apply_colosseum_fixedwing_patch.py` | 설치된 Colosseum 패치 |
 | `tools/fixedwing/ucc_fixedwing_mvp_v1/12_patch_build_colosseum_fixedwing.sh` | 패치 적용 및 UE 빌드 |
+| `tools/dataset_generation/ucc_fixedwing_dataset3_500m_v1/` | 500 m Dataset 3 실행 패키지 |
+| `docs/FIXEDWING_PX4_GAZEBO_PIPELINE_HANDOVER_2026-07-21.md` | 전체 데이터 흐름과 설계 판단 인수인계 |
+| `docs/FIXEDWING_AERODYNAMIC_MODEL_REFERENCE.md` | 공력 모델 분석과 한화 데이터 교체 지침 |
 
 ## 12. 검증 산출물
 
@@ -413,8 +461,9 @@ $HOME/vio_sim_ws/artifacts/fixedwing_mvp/mini_dataset_verify/
 
 - PX4 기본 `gz_rc_cessna` 공력 모델과 파라미터를 사용한다.
 - 무풍 및 검증용 IMU 노이즈 0 조건에서 통합을 검증했다.
-- 고정익 전용 실험 궤적 생성기는 아직 연결하지 않았다.
-- 현재 자동 이륙 후 PX4 기본 항법 동작을 사용한다.
+- 500 m Dataset 3 전용 mission은 연결했지만 범용 scenario generator는 아니다.
+- 500 m는 Cesium 실제 지형 AGL이 아니라 PlayerStart 기준 로컬 고도다.
+- 현행 PX4 Cessna의 flap 출력은 Gazebo flap joint controller에 연결되지 않았다.
 - Cessna 조종면의 시각 애니메이션은 없다.
 - 외부 관찰 카메라는 사람의 자세 확인용이며 데이터셋 `cam0`와 별개다.
 - 진동은 상태와 화면에서 관찰할 수 있지만 PSD, 주파수 대역 및 RMS 기반의
@@ -425,7 +474,7 @@ $HOME/vio_sim_ws/artifacts/fixedwing_mvp/mini_dataset_verify/
 1. PX4/Gazebo 풍속, 난류 및 돌풍 조건을 설정한다.
 2. Roll/Pitch/Yaw와 IMU 각속도에 대해 RMS, peak-to-peak 및 PSD를 계산한다.
 3. 무풍/정상풍/난류 시나리오별 동일 궤적을 반복 실행한다.
-4. 고정익 VIO에 필요한 선회, 상승, 하강 및 S-turn excitation 궤적을 연결한다.
+4. Dataset 3 S-turn을 범용 선회·상승·하강 scenario generator로 확장한다.
 5. IMU 노이즈와 bias를 목표 센서 사양에 맞게 복구한다.
 6. 3분 이상 장시간 데이터셋을 기록하고 드롭, 지연 및 영상 품질을 재검증한다.
 7. 필요하면 Cessna 조종면 애니메이션을 PX4 actuator 상태와 연결한다.

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <defs>
+    <style>
+      text { font-family: 'Noto Sans CJK KR', sans-serif; fill: #142033; }
+      .title { font-size: 30px; font-weight: 700; }
+      .label { font-size: 22px; font-weight: 600; }
+      .small { font-size: 17px; }
+      .axis { stroke: #26364d; stroke-width: 4; marker-end: url(#arrow); }
+      .callout { stroke: #44546a; stroke-width: 2.5; fill: none; marker-end: url(#arrowSmall); }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#26364d"/>
+    </marker>
+    <marker id="arrowSmall" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#44546a"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="720" fill="#f6f8fb"/>
+  <text x="50" y="58" class="title">현재 rc_cessna 공력면 배치 — 상면 개념도</text>
+  <text x="50" y="91" class="small">정확한 외형 도면이 아니라 SDF의 CP 위치·공력면 역할·body 축을 설명하기 위한 도해</text>
+
+  <g transform="translate(80,125)" filter="url(#shadow)">
+    <!-- main wing -->
+    <path d="M420 80 L540 80 L610 250 L350 250 Z" fill="#d7e1ef" stroke="#53657b" stroke-width="4"/>
+    <path d="M420 500 L540 500 L610 330 L350 330 Z" fill="#d7e1ef" stroke="#53657b" stroke-width="4"/>
+
+    <!-- fuselage, nose toward +X -->
+    <path d="M120 265 L535 265 Q650 265 720 290 Q650 315 535 315 L120 315 L75 290 Z"
+          fill="#394b63" stroke="#182638" stroke-width="4"/>
+    <ellipse cx="720" cy="290" rx="13" ry="48" fill="#204f9c"/>
+
+    <!-- horizontal tail -->
+    <path d="M115 218 L220 250 L220 330 L115 362 L70 340 L70 240 Z"
+          fill="#bfd2ea" stroke="#53657b" stroke-width="4"/>
+
+    <!-- ailerons -->
+    <path d="M365 95 L420 82 L486 245 L435 245 Z" fill="#f39c3d" stroke="#b7640e" stroke-width="3"/>
+    <path d="M365 485 L420 498 L486 335 L435 335 Z" fill="#f39c3d" stroke="#b7640e" stroke-width="3"/>
+
+    <!-- flaps -->
+    <path d="M485 245 L545 245 L578 160 L520 170 Z" fill="#39b980" stroke="#17734e" stroke-width="3"/>
+    <path d="M485 335 L545 335 L578 420 L520 410 Z" fill="#39b980" stroke="#17734e" stroke-width="3"/>
+
+    <!-- elevator -->
+    <path d="M73 242 L118 222 L182 251 L138 263 L73 263 Z" fill="#4d86d8" stroke="#23579e" stroke-width="3"/>
+    <path d="M73 338 L118 358 L182 329 L138 317 L73 317 Z" fill="#4d86d8" stroke="#23579e" stroke-width="3"/>
+
+    <!-- rudder indication -->
+    <path d="M90 290 L125 250 L152 265 L122 290 Z" fill="#9c63c7" stroke="#65358b" stroke-width="3"/>
+
+    <!-- CG and CP points -->
+    <circle cx="490" cy="290" r="11" fill="#e44545" stroke="white" stroke-width="4"/>
+    <line x1="474" y1="290" x2="506" y2="290" stroke="#e44545" stroke-width="4"/>
+    <line x1="490" y1="274" x2="490" y2="306" stroke="#e44545" stroke-width="4"/>
+
+    <circle cx="465" cy="145" r="9" fill="#f39c3d" stroke="white" stroke-width="3"/>
+    <circle cx="465" cy="435" r="9" fill="#f39c3d" stroke="white" stroke-width="3"/>
+    <circle cx="465" cy="225" r="9" fill="#39b980" stroke="white" stroke-width="3"/>
+    <circle cx="465" cy="355" r="9" fill="#39b980" stroke="white" stroke-width="3"/>
+    <circle cx="120" cy="290" r="9" fill="#4d86d8" stroke="white" stroke-width="3"/>
+    <circle cx="120" cy="272" r="8" fill="#9c63c7" stroke="white" stroke-width="3"/>
+
+    <!-- axes -->
+    <line x1="490" y1="540" x2="670" y2="540" class="axis"/>
+    <text x="682" y="548" class="label">+X 기수</text>
+    <line x1="490" y1="540" x2="490" y2="420" class="axis"/>
+    <text x="510" y="440" class="label">+Y 좌측</text>
+
+    <!-- callouts -->
+    <path d="M750 95 C650 95 575 110 475 145" class="callout"/>
+    <text x="765" y="92" class="label">외측 날개 / 에일러론</text>
+    <text x="765" y="120" class="small">CP: (-0.05, ±0.45, 0.05), S=0.6 m²/개</text>
+
+    <path d="M750 205 C650 205 575 205 475 225" class="callout"/>
+    <text x="765" y="202" class="label">내측 날개 / 플랩</text>
+    <text x="765" y="230" class="small">CP: (-0.05, ±0.15, 0.05), S=0.6 m²/개</text>
+
+    <path d="M750 315 C540 315 300 305 132 292" class="callout"/>
+    <text x="765" y="312" class="label">수평 꼬리 / 엘리베이터</text>
+    <text x="765" y="340" class="small">CP: (-0.5, 0, 0), S=0.01 m²</text>
+
+    <path d="M750 410 C500 410 265 330 132 276" class="callout"/>
+    <text x="765" y="407" class="label">수직 꼬리 / 러더</text>
+    <text x="765" y="435" class="small">CP: (-0.5, 0, 0.05), S=0.1 m²</text>
+
+    <path d="M750 490 C640 490 565 390 500 304" class="callout"/>
+    <text x="765" y="487" class="label">body 원점 / 기준 CG</text>
+    <text x="765" y="515" class="small">현재 base_link inertial pose는 원점</text>
+  </g>
+
+  <g transform="translate(55,665)">
+    <rect x="0" y="-22" width="22" height="22" fill="#f39c3d"/><text x="32" y="-4" class="small">에일러론</text>
+    <rect x="150" y="-22" width="22" height="22" fill="#39b980"/><text x="182" y="-4" class="small">플랩</text>
+    <rect x="275" y="-22" width="22" height="22" fill="#4d86d8"/><text x="307" y="-4" class="small">엘리베이터</text>
+    <rect x="435" y="-22" width="22" height="22" fill="#9c63c7"/><text x="467" y="-4" class="small">러더</text>
+    <circle cx="590" cy="-11" r="9" fill="#e44545"/><text x="610" y="-4" class="small">CG/원점</text>
+  </g>
+</svg>

@@ -34,6 +34,8 @@ class ApplyExternalPhysicsProfileTest(unittest.TestCase):
                     str(PROFILE_SCRIPT),
                     "--settings",
                     str(settings_path),
+                    "--spawn-altitude-m",
+                    "500",
                     "--no-backup",
                 ],
                 text=True,
@@ -47,6 +49,7 @@ class ApplyExternalPhysicsProfileTest(unittest.TestCase):
             self.assertEqual(
                 applied["PhysicsEngineName"], "ExternalPhysicsEngine"
             )
+            self.assertEqual(applied["Vehicles"]["Drone1"]["Z"], -500.0)
 
 
 if __name__ == "__main__":

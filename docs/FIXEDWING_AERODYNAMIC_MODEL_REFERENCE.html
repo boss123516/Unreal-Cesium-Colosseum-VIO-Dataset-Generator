@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Gazebo 고정익 기체·공력 모델 기준서</title>
+<style>
+@page { size: A4; margin: 16mm 16mm 18mm 16mm; }
+html { font-family: "Noto Sans CJK KR", "Noto Sans KR", sans-serif; color: #172235; }
+body { font-family: "Noto Sans CJK KR", "Noto Sans KR", sans-serif; font-size: 9.4pt; line-height: 1.55; margin: 0; }
+h1 { color: #102640; font-size: 28pt; line-height: 1.22; margin: 22mm 0 7mm; letter-spacing: -0.6pt; }
+h1 + h2 { color: #365a81; font-size: 16pt; border: 0; padding: 0; margin: 0 0 12mm; }
+h2 { color: #163f6b; font-size: 17pt; line-height: 1.3; margin: 9mm 0 4mm; padding: 0 0 2mm 3mm; border-left: 4px solid #2f78bd; border-bottom: 1px solid #cbd8e5; }
+h3 { color: #28577f; font-size: 12.5pt; margin: 6mm 0 2mm; }
+h4 { color: #3d5d78; font-size: 10.5pt; margin: 4mm 0 1.5mm; }
+p { margin: 0 0 2.8mm; }
+ul, ol { margin: 1.5mm 0 3mm 5.5mm; padding-left: 4mm; }
+li { margin: 0.7mm 0; }
+table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; font-size: 8.5pt; page-break-inside: auto; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
+th { color: #ffffff; background: #315f8d; font-weight: 700; text-align: left; padding: 2.2mm 2.4mm; border: 0.3mm solid #315f8d; }
+td { padding: 1.8mm 2.4mm; border: 0.3mm solid #bccada; vertical-align: top; }
+tr:nth-child(even) td { background: #f1f5f9; }
+blockquote { margin: 5mm 0; padding: 4mm 5mm; background: #eef5fc; border-left: 4px solid #2f78bd; color: #173650; }
+blockquote p { margin: 0; }
+code { font-family: "DejaVu Sans Mono", monospace; font-size: 8.5pt; color: #713821; background: #f4eee9; padding: 0.2mm 0.7mm; }
+pre { font-family: "DejaVu Sans Mono", monospace; font-size: 8.2pt; line-height: 1.4; background: #edf2f6; color: #1d2d3d; border-left: 3px solid #6785a2; padding: 4mm; white-space: pre-wrap; page-break-inside: avoid; }
+pre code { color: #1d2d3d !important; background: #edf2f6 !important; padding: 0; }
+img { display: block; max-width: 100%; height: auto; margin: 5mm auto 3mm; page-break-inside: avoid; }
+p > img[alt*="Gazebo"] { max-height: 105mm; width: auto; border: 0.3mm solid #d1d9e1; }
+p > img[alt*="적용 경계"], p > img[alt*="공력면"] { width: 100%; }
+a { color: #1e63a0; text-decoration: none; }
+.page-break { page-break-before: always; break-before: page; height: 0; }
+hr { border: 0; border-top: 0.4mm solid #9eb2c6; margin: 7mm 0; }
+strong { color: #102f50; }
+</style>
+</head>
+<body>
+
+<h1>Gazebo 고정익 기체·공력 모델 기준서</h1>
+<h2>PX4 <code>rc_cessna_ucc</code> 현행 모델 분석 및 한화 고정익 데이터 교체 지침</h2>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>문서 목적</td>
+<td>현행 고정익 모델의 물리·공력·추진·조종 계통 설명과 한화 제공 데이터 적용 경계 정의</td>
+</tr>
+<tr>
+<td>기준 모델</td>
+<td>PX4 Gazebo <code>rc_cessna</code>, UCC wrapper <code>rc_cessna_ucc</code></td>
+</tr>
+<tr>
+<td>기준 소프트웨어</td>
+<td>PX4 commit <code>d6f12ad1c4f7</code>, PX4 Gazebo models <code>b6127f4ec20d</code>, Gazebo Sim 8.14.0</td>
+</tr>
+<tr>
+<td>작성일</td>
+<td>2026-07-21</td>
+</tr>
+<tr>
+<td>상태</td>
+<td>현행 모델 분석 완료 / 한화 실기체 데이터 수신 전 기준본</td>
+</tr>
+<tr>
+<td>보안 주의</td>
+<td>본 문서에는 현재 한화 고유 제원이나 비공개 공력 데이터가 포함되어 있지 않음</td>
+</tr>
+</tbody></table>
+<p><img src="assets/fixedwing_aero_reference/gazebo_rc_cessna_flight.png" alt="Gazebo에서 비행 중인 현행 RC Cessna 모델"></p>
+<blockquote>
+<p><strong>핵심 결론</strong><br>PX4 제어기, Gazebo 6-DoF 적분, UCC 상태 브리지, Unreal/Cesium 렌더링,
+VIO 데이터 기록이라는 큰 틀은 그대로 재사용할 수 있다. 한화 데이터가 들어오면
+<strong>기체 물성·형상, 공력계수, 조종면 효과, 추진계 맵과 PX4 airframe 파라미터</strong>를
+교체한다. 현재 <code>rc_cessna</code> 수치는 정밀 공력 검증용이 아니라 통합 비행용 튜닝
+모델에 가깝다.</p>
+</blockquote>
+<div class="page-break"></div>
+
+<h2>1. 문서 목적과 적용 범위</h2>
+<p>이 문서는 다음 질문에 답하기 위한 기준 문서다.</p>
+<ol>
+<li>현재 Gazebo에서 어떤 고정익 모델이 실제로 비행하는가?</li>
+<li>질량, 관성, 충돌 형상, 공력면, 추진력은 어디에서 정의되는가?</li>
+<li>Gazebo가 양력·항력·모멘트를 어떤 식으로 계산하는가?</li>
+<li>PX4 출력이 에일러론, 엘리베이터, 러더, 플랩과 어떻게 연결되는가?</li>
+<li>한화로부터 기체 정보를 받으면 어떤 항목과 파일을 바꿔야 하는가?</li>
+<li>교체 후 무엇을 시험해야 기존 VIO 파이프라인을 유지하면서 기체 동역학을
+신뢰할 수 있는가?</li>
+</ol>
+<p>고정익 시뮬레이션의 데이터 흐름과 소프트웨어 구조는 대부분 공통으로 재사용할
+수 있다. 다만 다음 항목은 기체별 차이가 크므로 “고정익은 유사하다”는 이유로
+현재 값을 그대로 사용하면 안 된다.</p>
+<ul>
+<li>질량, CG와 관성 텐서</li>
+<li>기준 날개 면적, span, MAC, aspect ratio</li>
+<li>양력·항력 polar와 stall 특성</li>
+<li>종·횡·방향 안정미계수</li>
+<li>조종면 크기, 변위 제한, 속도 제한과 effectiveness</li>
+<li>프로펠러/모터/엔진 추력·토크 맵</li>
+<li>trim 속도, stall 속도, 상승률, 활공비 등 기준 성능</li>
+</ul>
+<p>본 문서는 한화 기체 데이터가 도착하기 전의 <strong>교체 명세서 겸 현행 모델 감사
+기록</strong>으로 사용한다.</p>
+<h2>2. 전체 구조와 한화 데이터 교체 경계</h2>
+<p><img src="assets/fixedwing_aero_reference/replacement_architecture.png" alt="한화 고정익 데이터 적용 경계"></p>
+<h3>2.1 그대로 유지할 부분</h3>
+<ul>
+<li>PX4의 고정익 자세·속도·항법 제어 구조</li>
+<li>Gazebo 서버, 250 Hz 물리 적분 및 센서 생성 구조</li>
+<li><code>/ucc/fixed_wing/kinematics</code> 상태 계약</li>
+<li>Gazebo ENU/FLU에서 AirSim NED/FRD로의 좌표 변환</li>
+<li>UCC External Physics 100 Hz 주입</li>
+<li>Unreal/Cesium 지형, 카메라와 데이터 기록 파이프라인</li>
+<li><code>cam0</code>, IMU, Ground Truth 데이터셋 형식과 검증기</li>
+</ul>
+<h3>2.2 한화 값으로 교체할 부분</h3>
+<ul>
+<li>Gazebo 기체 <code>model.sdf</code>의 질량, CG, 관성, collision과 링크 배치</li>
+<li>공력 플러그인의 기준 형상과 공력계수</li>
+<li>각 조종면의 위치, 회전축, 각도/속도 제한과 제어 미계수</li>
+<li>프로펠러·모터 또는 엔진의 추력/토크 모델</li>
+<li>PX4 airframe의 control allocation, trim과 고정익 제어 파라미터</li>
+<li>Unreal에서 표시할 실제 기체 외형 메시, 크기와 로컬 축 보정</li>
+</ul>
+<h2>3. 현재 실제 실행 모델</h2>
+<p>실행 스크립트는 다음 값을 사용한다.</p>
+<pre><code class="language-text">PX4_SYS_AUTOSTART=4003
+PX4_SIM_MODEL=gz_rc_cessna_ucc
+PX4_GZ_MODELS=tools/fixedwing/ucc_fixedwing_mvp_v1/gz_models
+</code></pre>
+<p><code>rc_cessna_ucc</code>는 새로운 공력 모델이 아니다. 다음과 같이 PX4 기본
+<code>rc_cessna</code>를 merge include하고 UCC 상태 발행기만 추가한다.</p>
+<pre><code class="language-xml">&lt;model name=&quot;rc_cessna_ucc&quot;&gt;
+  &lt;include merge=&quot;true&quot;&gt;
+    &lt;uri&gt;rc_cessna&lt;/uri&gt;
+  &lt;/include&gt;
+  &lt;plugin filename=&quot;libUccKinematicsPublisher.so&quot;
+          name=&quot;ucc::sim::systems::KinematicsPublisher&quot;&gt;
+    &lt;link_name&gt;base_link&lt;/link_name&gt;
+    &lt;topic&gt;/ucc/fixed_wing/kinematics&lt;/topic&gt;
+    &lt;publish_rate_hz&gt;250&lt;/publish_rate_hz&gt;
+  &lt;/plugin&gt;
+&lt;/model&gt;
+</code></pre>
+<p>따라서 실제 질량·관성·공력·추진 정의는 다음 PX4 Gazebo model 파일에 있다.</p>
+<pre><code class="language-text">/home/boss/PX4-Autopilot/Tools/simulation/gz/models/rc_cessna/model.sdf
+</code></pre>
+<p>UCC <code>KinematicsPublisher</code>는 위치·자세·속도·가속도를 읽어 전송할 뿐 힘이나
+모멘트를 생성하지 않는다.</p>
+<h2>4. 기체 종류, 좌표계와 단위</h2>
+<h3>4.1 기체 종류</h3>
+<p>현재 모델은 실물 탑승형 Cessna가 아니라 약 1 m span을 가진 소형
+<strong>RC Cessna 형상 고정익</strong>이다.</p>
+<ul>
+<li>단발 tractor/puller 프로펠러</li>
+<li>고익(high wing) 형상</li>
+<li>좌·우 에일러론</li>
+<li>좌·우 플랩 링크</li>
+<li>단일 엘리베이터와 러더</li>
+<li>삼륜 착륙장치</li>
+<li>모델 총질량 약 1.67 kg</li>
+</ul>
+<h3>4.2 Gazebo body 좌표</h3>
+<pre><code class="language-text">+X : 기수/전방
++Y : 좌측
++Z : 상방
+</code></pre>
+<p>이는 Gazebo ENU/FLU 계열이다. PX4 내부의 body FRD와 AirSim NED/FRD로 전달할
+때는 기존 브리지에서 축과 quaternion을 변환한다. 한화 모델을 만들 때도 Gazebo
+기체 메시와 공력 플러그인 기준축은 반드시 <code>+X forward</code>, <code>+Y left</code>, <code>+Z up</code>으로
+통일한다.</p>
+<h3>4.3 단위</h3>
+<ul>
+<li>길이: m</li>
+<li>질량: kg</li>
+<li>관성: kg·m²</li>
+<li>각도: SDF 내부 rad</li>
+<li>속도: m/s, rad/s</li>
+<li>힘/모멘트: N, N·m</li>
+<li>공기 밀도: kg/m³</li>
+</ul>
+<div class="page-break"></div>
+
+<h2>5. 현행 물리 모델</h2>
+<h3>5.1 질량과 관성</h3>
+<table>
+<thead>
+<tr>
+<th>링크</th>
+<th align="right">질량</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>base_link</code></td>
+<td align="right">1.500 kg</td>
+</tr>
+<tr>
+<td>airspeed 링크</td>
+<td align="right">0.015 kg</td>
+</tr>
+<tr>
+<td>프로펠러 링크</td>
+<td align="right">0.005 kg</td>
+</tr>
+<tr>
+<td>좌·우·전륜</td>
+<td align="right">0.150 kg</td>
+</tr>
+<tr>
+<td>조종면 링크 합계</td>
+<td align="right">약 0 kg에 가까운 수치</td>
+</tr>
+<tr>
+<td><strong>총질량</strong></td>
+<td align="right"><strong>약 1.670 kg</strong></td>
+</tr>
+</tbody></table>
+<p><code>base_link</code>의 관성은 다음과 같다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th align="right">값 (kg·m²)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Ixx</code></td>
+<td align="right">0.1975630</td>
+</tr>
+<tr>
+<td><code>Iyy</code></td>
+<td align="right">0.1458929</td>
+</tr>
+<tr>
+<td><code>Izz</code></td>
+<td align="right">0.1477000</td>
+</tr>
+<tr>
+<td><code>Ixy</code>, <code>Ixz</code>, <code>Iyz</code></td>
+<td align="right">0</td>
+</tr>
+</tbody></table>
+<p>현재 inertial pose는 body 원점이며 별도 CG offset이 없다. 한화 데이터가 CG
+위치와 관성 기준점을 제공하면 inertial pose 및 평행축 정리 적용 여부를 함께
+확인해야 한다.</p>
+<h3>5.2 충돌 형상</h3>
+<ul>
+<li>동체: box <code>0.65 × 0.08 × 0.10 m</code>, X offset <code>-0.14 m</code></li>
+<li>주익: box <code>0.10 × 1.00 × 0.01 m</code>, Z offset <code>+0.07 m</code></li>
+<li>좌·우 주륜: radius <code>0.03 m</code>, width <code>0.01 m</code></li>
+<li>전륜: radius <code>0.025 m</code>, width <code>0.01 m</code></li>
+<li>프로펠러: box <code>0.005 × 0.22 × 0.02 m</code></li>
+</ul>
+<p>공력 면적과 collision 면적은 서로 독립이다. 현재 collision 주익 평면 면적은
+약 <code>0.1 m²</code>지만 공력 플러그인에 입력된 주익 계열 유효 면적 합은 <code>2.4 m²</code>다.
+따라서 현행 공력 면적은 형상에서 계산한 물리 면적이라기보다 비행 동작을 위한
+튜닝값으로 봐야 한다.</p>
+<h3>5.3 물리 적분과 환경</h3>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th align="right">현행 값</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Physics engine</td>
+<td align="right">Gazebo ODE</td>
+</tr>
+<tr>
+<td>적분 step</td>
+<td align="right">0.004 s</td>
+</tr>
+<tr>
+<td>update rate</td>
+<td align="right">250 Hz</td>
+</tr>
+<tr>
+<td>중력</td>
+<td align="right"><code>0 0 -9.8 m/s²</code></td>
+</tr>
+<tr>
+<td>대기</td>
+<td align="right">adiabatic atmosphere 선언</td>
+</tr>
+<tr>
+<td>LiftDrag 공기 밀도</td>
+<td align="right"><code>1.2041 kg/m³</code> 고정</td>
+</tr>
+<tr>
+<td>바람</td>
+<td align="right">현재 없음</td>
+</tr>
+</tbody></table>
+<p>대기가 선언되어 있어도 현행 <code>LiftDrag</code>는 각 플러그인의 고정 <code>air_density</code>를
+사용한다. 한화 요구사항에 고도별 성능이 포함되면 밀도 모델을 별도로 처리해야
+한다.</p>
+<h2>6. 현행 공력 모델 개요</h2>
+<p>현행 모델은 Gazebo Sim 8.14의 기본 <code>LiftDrag</code> 시스템 6개를 <code>base_link</code>에
+부착한다. 이것은 CFD, panel method 또는 blade element 해석이 아니라 각
+공력면을 선형 계수와 piecewise stall 곡선으로 표현하는 저차 모델이다.</p>
+<p><img src="assets/fixedwing_aero_reference/aero_surface_layout.png" alt="현행 공력면과 CP 위치"></p>
+<h3>6.1 상대속도와 받음각</h3>
+<p>각 공력면의 CP에서 다음 상대속도를 계산한다.</p>
+<pre><code class="language-text">Vcp = Vcg + omega × rcp - Vwind
+</code></pre>
+<p>그 뒤 공력면의 <code>forward</code>, <code>upward</code>로 정의된 lift-drag plane에 속도를 투영해
+받음각 <code>alpha</code>와 sweep 성분을 구한다. 속도가 전방 벡터의 반대 방향이면 힘을
+생성하지 않는다.</p>
+<h3>6.2 동압</h3>
+<pre><code class="language-text">q = 0.5 × rho × Vplane²
+</code></pre>
+<p>현행 모든 공력면은 <code>rho = 1.2041 kg/m³</code>를 사용한다.</p>
+<h3>6.3 양력</h3>
+<p>stall 전 기본식은 다음과 같다.</p>
+<pre><code class="language-text">CL = CLa × alpha × cos²(sweep)
+CL = CL + control_joint_rad_to_cl × delta
+Lift = CL × q × S
+</code></pre>
+<p><code>a0</code>는 계산 받음각에 더해지는 초기 받음각 offset 역할을 한다. <code>delta</code>는 연결된
+Gazebo 조인트의 실제 회전각이다.</p>
+<p>stall 이후에는 <code>alpha_stall</code>, <code>CLa_stall</code>을 사용하는 piecewise 직선으로
+전환하고, 양의 받음각에서 <code>CL ≥ 0</code>, 음의 받음각에서 <code>CL ≤ 0</code>으로 제한한다.</p>
+<h3>6.4 항력</h3>
+<p>stall 전 기본식은 다음과 같다.</p>
+<pre><code class="language-text">CD = abs(CDa × alpha × cos²(sweep))
+Drag = CD × q × S
+</code></pre>
+<p>현재 플러그인은 <code>CD0 + kCL²</code> 형태의 parasite/induced drag를 사용하지 않는다.
+조종면 각도 역시 현행 구현에서는 <code>CD</code>를 바꾸지 않는다.</p>
+<h3>6.5 공력 모멘트</h3>
+<pre><code class="language-text">CM = CMa × alpha + CMdelta × delta
+Moment = CM × q × S
+Total torque = Moment + rcp × (Lift + Drag)
+</code></pre>
+<p>현행 SDF는 모든 공력면의 <code>CMa=0</code>, <code>CMdelta=0</code>이므로 직접 공력 모멘트는 0이다.
+실제 회전 모멘트 대부분은 CP offset에서 힘을 적용한 <code>rcp × F</code>로 만들어진다.</p>
+<h3>6.6 공식 구현 기준</h3>
+<p>계산식 기준은 Gazebo Sim 8.14.0의 다음 소스다.</p>
+<pre><code class="language-text">https://github.com/gazebosim/gz-sim/blob/
+gz-sim8_8.14.0/src/systems/lift_drag/LiftDrag.cc
+</code></pre>
+<div class="page-break"></div>
+
+<h2>7. 현행 공력면별 계수</h2>
+<p>공통값:</p>
+<pre><code class="language-text">CLa          = 4.752798721 /rad
+alpha_stall  = 0.3391428111 rad = 19.43 deg
+CLa_stall    = -3.85 /rad
+CDa_stall    = -0.9233984055 /rad
+CMa          = 0
+CMa_stall    = 0
+rho          = 1.2041 kg/m³
+forward      = (1, 0, 0)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>공력면</th>
+<th align="right">CP (m)</th>
+<th align="right">S (m²)</th>
+<th align="right"><code>a0</code> (rad)</th>
+<th align="right"><code>CDa</code></th>
+<th align="right">조종 gain <code>dCL/dδ</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>좌 에일러론/외측 날개</td>
+<td align="right"><code>(-0.05,+0.45,+0.05)</code></td>
+<td align="right">0.6</td>
+<td align="right">0.0598428</td>
+<td align="right">1.5</td>
+<td align="right">-0.3</td>
+</tr>
+<tr>
+<td>우 에일러론/외측 날개</td>
+<td align="right"><code>(-0.05,-0.45,+0.05)</code></td>
+<td align="right">0.6</td>
+<td align="right">0.0598428</td>
+<td align="right">1.5</td>
+<td align="right">-0.3</td>
+</tr>
+<tr>
+<td>좌 플랩/내측 날개</td>
+<td align="right"><code>(-0.05,+0.15,+0.05)</code></td>
+<td align="right">0.6</td>
+<td align="right">0.0598428</td>
+<td align="right">0.6417112</td>
+<td align="right">-0.1</td>
+</tr>
+<tr>
+<td>우 플랩/내측 날개</td>
+<td align="right"><code>(-0.05,-0.15,+0.05)</code></td>
+<td align="right">0.6</td>
+<td align="right">0.0598428</td>
+<td align="right">0.6417112</td>
+<td align="right">-0.1</td>
+</tr>
+<tr>
+<td>엘리베이터/수평 꼬리</td>
+<td align="right"><code>(-0.50,0,0)</code></td>
+<td align="right">0.01</td>
+<td align="right">-0.2</td>
+<td align="right">0.6417112</td>
+<td align="right">-4.0</td>
+</tr>
+<tr>
+<td>러더/수직 꼬리</td>
+<td align="right"><code>(-0.50,0,+0.05)</code></td>
+<td align="right">0.1</td>
+<td align="right">0</td>
+<td align="right">0.6417112</td>
+<td align="right">+0.8</td>
+</tr>
+</tbody></table>
+<p>러더만 <code>upward=(0,1,0)</code>을 사용해 횡방향 힘을 만든다. 나머지는
+<code>upward=(0,0,1)</code>이다.</p>
+<h3>7.1 수치 sanity check</h3>
+<p>body 받음각 0도, 조종면 0도, <code>V=15 m/s</code>라는 단순 조건에서 외측/내측 날개
+4개만 계산하면 다음 수준이다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th align="right">계산값</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>동압</td>
+<td align="right">135.46 Pa</td>
+</tr>
+<tr>
+<td>각 날개 요소의 <code>CL</code></td>
+<td align="right">약 0.2844</td>
+</tr>
+<tr>
+<td>날개 4개 총양력</td>
+<td align="right">약 92.5 N</td>
+</tr>
+<tr>
+<td>날개 4개 총항력</td>
+<td align="right">약 20.8 N</td>
+</tr>
+<tr>
+<td>1.67 kg 기체 중량</td>
+<td align="right">약 16.4 N</td>
+</tr>
+</tbody></table>
+<p>실제 비행에서는 기체가 음의 trim 받음각을 가져 양력이 줄어든 상태에서 균형을
+잡는다. 이 계산은 현행 면적·계수가 실제 RC 기체의 기하 기반 값이 아니라는 점을
+보여주는 참고치이며, 실제 비행 상태의 힘을 그대로 의미하지 않는다.</p>
+<h2>8. 추진 모델</h2>
+<p>프로펠러는 Gazebo <code>MulticopterMotorModel</code>을 fixed-wing puller로 재사용한다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th align="right">현행 값</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>위치</td>
+<td align="right">body <code>X=+0.22 m</code></td>
+</tr>
+<tr>
+<td>회전 방향</td>
+<td align="right">CW</td>
+</tr>
+<tr>
+<td>상승 time constant</td>
+<td align="right">0.0125 s</td>
+</tr>
+<tr>
+<td>하강 time constant</td>
+<td align="right">0.025 s</td>
+</tr>
+<tr>
+<td>최대 회전속도</td>
+<td align="right">1000 rad/s</td>
+</tr>
+<tr>
+<td>motor constant</td>
+<td align="right"><code>1.2e-5</code></td>
+</tr>
+<tr>
+<td>moment constant</td>
+<td align="right">0.016</td>
+</tr>
+<tr>
+<td>rotor drag coefficient</td>
+<td align="right"><code>8.06428e-5</code></td>
+</tr>
+<tr>
+<td>rolling moment coefficient</td>
+<td align="right"><code>1e-6</code></td>
+</tr>
+</tbody></table>
+<p>이 모델은 실제 프로펠러 직경·피치, advance ratio, 비행속도별 효율 곡선과
+모터/ESC 전기 특성을 직접 반영하지 않는다. 한화 제공 데이터에 thrust bench
+결과 또는 RPM/airspeed별 추력·토크 맵이 있으면 해당 맵을 우선 적용한다.</p>
+<h2>9. PX4 조종면과 Gazebo 연결</h2>
+<p>PX4 airframe <code>4003_gz_rc_cessna</code>는 control surface 6개와 motor 1개를 설정한다.</p>
+<table>
+<thead>
+<tr>
+<th>PX4 surface</th>
+<th>Type</th>
+<th>Gazebo 출력</th>
+<th>SDF 대상</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CS0</td>
+<td>Left Aileron</td>
+<td><code>servo_0</code></td>
+<td><code>servo_0</code> joint</td>
+</tr>
+<tr>
+<td>CS1</td>
+<td>Right Aileron</td>
+<td><code>servo_1</code></td>
+<td><code>servo_1</code> joint</td>
+</tr>
+<tr>
+<td>CS2</td>
+<td>Elevator</td>
+<td><code>servo_2</code></td>
+<td><code>servo_2</code> joint</td>
+</tr>
+<tr>
+<td>CS3</td>
+<td>Rudder</td>
+<td><code>servo_3</code></td>
+<td><code>rudder_joint</code></td>
+</tr>
+<tr>
+<td>CS4</td>
+<td>Left Flap</td>
+<td><code>servo_4</code></td>
+<td><code>left_flap_joint</code> 의도</td>
+</tr>
+<tr>
+<td>CS5</td>
+<td>Right Flap</td>
+<td><code>servo_5</code></td>
+<td><code>right_flap_joint</code> 의도</td>
+</tr>
+<tr>
+<td>Motor 0</td>
+<td>Motor 1</td>
+<td><code>command/motor_speed</code></td>
+<td><code>rotor_puller_joint</code></td>
+</tr>
+</tbody></table>
+<p>Gazebo servo 인터페이스는 PX4 normalized/PWM 출력을 기본 <code>-45~+45 deg</code> 범위로
+선형 변환해 각 <code>servo_n</code> 토픽으로 발행한다. SDF 조인트 제한은 약
+<code>-0.78~+0.78 rad</code>다.</p>
+<h3>9.1 확인된 플랩 연결 결함</h3>
+<p>현행 SDF에는 에일러론, 엘리베이터, 러더의 <code>JointPositionController</code>만 있고
+<code>left_flap_joint</code>, <code>right_flap_joint</code> 컨트롤러가 없다. 런타임 토픽 확인 결과도
+다음과 같다.</p>
+<ul>
+<li><code>servo_0~3</code>: publisher와 subscriber 존재</li>
+<li><code>servo_4~5</code>: PX4 publisher만 존재, Gazebo subscriber 없음</li>
+</ul>
+<p>따라서 현행 플랩 명령은 조인트와 공력계수에 적용되지 않는다. 한화 기체 모델을
+작성할 때는 각 control surface 출력마다 다음 세 연결이 모두 존재해야 한다.</p>
+<pre><code class="language-text">PX4 actuator function
+  -&gt; /model/&lt;name&gt;/servo_N topic
+  -&gt; JointPositionController
+  -&gt; control_joint_name을 참조하는 공력 모델
+</code></pre>
+<div class="page-break"></div>
+
+<h2>10. 현행 모델의 한계와 사용 가능 범위</h2>
+<h3>10.1 명확한 한계</h3>
+<ul>
+<li>정밀 CFD나 vortex lattice 결과가 아닌 단순 선형/piecewise 모델</li>
+<li>유효 주익 면적 합 <code>2.4 m²</code>와 collision 평면 면적 약 <code>0.1 m²</code>의 큰 차이</li>
+<li><code>CD0</code>, induced drag, Reynolds/Mach 영향 없음</li>
+<li><code>CMa</code>, <code>CMq</code>, 조종면에 의한 직접 moment가 없음</li>
+<li>sideslip 및 <code>CYβ</code>, <code>Clβ</code>, <code>Cnβ</code> 안정미계수 없음</li>
+<li><code>p</code>, <code>q</code>, <code>r</code> rate derivative 없음</li>
+<li>조종면 변위가 <code>CL</code>만 바꾸고 <code>CD</code>, <code>CM</code>에는 직접 반영되지 않음</li>
+<li>ground effect, downwash, propwash와 동체 parasite drag 없음</li>
+<li>고정 공기 밀도, 현재 무풍</li>
+<li>플랩 출력 미연결</li>
+<li>stall 이후 음의 <code>CDa_stall</code>로 인해 일부 큰 받음각에서 항력 곡선이
+비물리적으로 감소하거나 0 부근을 통과할 수 있음</li>
+</ul>
+<h3>10.2 현행 모델을 사용할 수 있는 목적</h3>
+<ul>
+<li>PX4/Gazebo/UCC/Unreal 통합 연결 시험</li>
+<li>자동 이륙과 일반 선회 동작 시험</li>
+<li>VIO용 카메라·IMU·GT 파이프라인 개발</li>
+<li>고정익 형태의 궤적 및 자세 excitation 초기 개발</li>
+</ul>
+<h3>10.3 현행 모델을 그대로 사용하면 안 되는 목적</h3>
+<ul>
+<li>한화 실기체 성능 예측</li>
+<li>stall 속도·stall recovery 검증</li>
+<li>활공비, 항속거리, 상승률의 정량 예측</li>
+<li>실제 조종면 sizing 및 제어권한 검증</li>
+<li>강풍·난류·돌풍 인증 수준 시험</li>
+<li>실제 기체와의 handling quality 비교</li>
+</ul>
+<h2>11. 한화 데이터 적용 전략</h2>
+<h3>11.1 권장 원칙</h3>
+<p>PX4의 upstream <code>rc_cessna</code> 파일을 직접 수정하지 않는다. 다음 독립 모델을 만든다.</p>
+<pre><code class="language-text">tools/fixedwing/ucc_fixedwing_mvp_v1/gz_models/
+  hanwha_fixedwing/
+    model.config
+    model.sdf
+    meshes/
+</code></pre>
+<p>이렇게 하면 기준 모델과 한화 모델을 같은 실행 구조에서 선택적으로 비교할 수
+있고, PX4 submodule 업데이트에도 영향을 덜 받는다.</p>
+<h3>11.2 두 가지 공력 구현 선택지</h3>
+<h4>선택지 A — 단순 <code>LiftDrag</code> 유지</h4>
+<p>한화가 제한된 기본 제원과 <code>CL-alpha</code>, <code>CD-alpha</code>, stall 정보만 제공할 때 사용한다.</p>
+<ul>
+<li>현재 구조와 가장 유사</li>
+<li>구현·디버깅이 빠름</li>
+<li>공력면별 CP와 선형 계수를 직접 배치</li>
+<li>높은 받음각, sideslip, rate damping 정확도는 제한됨</li>
+</ul>
+<h4>선택지 B — <code>AdvancedLiftDrag</code> 전환 권장</h4>
+<p>한화가 풍동/CFD/AVL/XFLR/OpenVSP 또는 비행시험 기반 안정미계수를 제공할 때
+사용한다.</p>
+<p>주요 입력 예:</p>
+<pre><code class="language-text">S, AR, MAC
+CL0, CLa, CLq
+CD0, induced-drag efficiency
+Cm0, Cma, Cmq
+CYb, Clb, Cnb
+CYp/CLp/Clp/Cnp
+CYr/CLr/Clr/Cnr
+각 조종면의 dCL, dCD, dCY, dCl, dCm, dCn
+</code></pre>
+<p>현재 시스템에는 Gazebo <code>AdvancedLiftDrag</code> 플러그인과 예제 파일이 설치되어 있다.
+한화 데이터가 충분하면 단순 공력면 6개를 유지하는 것보다 단일 6-DoF
+stability derivative 모델로 전환하는 편이 물리적으로 일관된다.</p>
+<h2>12. 한화에 요청할 데이터 패키지</h2>
+<h3>12.1 좌표와 형상</h3>
+<ul>
+<li>기체 좌표계 정의와 부호 규약</li>
+<li>CAD/mesh 원점, CG 기준점, aerodynamic reference point</li>
+<li>날개 기준면적 <code>S</code>, span <code>b</code>, MAC <code>c_bar</code>, aspect ratio <code>AR</code></li>
+<li>주익 incidence, dihedral, sweep, twist</li>
+<li>수평/수직 꼬리 면적, arm, incidence</li>
+<li>각 조종면 span/chord 비, hinge 위치와 회전축</li>
+<li>프로펠러 중심, 직경, 피치와 회전 방향</li>
+<li>착륙장치 위치와 타이어 크기</li>
+</ul>
+<h3>12.2 질량 특성</h3>
+<ul>
+<li>시험 구성별 총질량</li>
+<li>3축 CG 위치</li>
+<li><code>Ixx, Iyy, Izz, Ixy, Ixz, Iyz</code></li>
+<li>관성 텐서의 기준점과 좌표계</li>
+<li>연료/배터리/탑재체 변화에 따른 질량·CG 범위</li>
+</ul>
+<h3>12.3 종방향 공력</h3>
+<ul>
+<li><code>CL-alpha</code>, <code>CD-alpha</code>, <code>Cm-alpha</code> 표 또는 계수</li>
+<li><code>CL0</code>, <code>CLa</code>, <code>CLmax</code>, <code>alpha_stall</code></li>
+<li><code>CD0</code>, drag polar의 <code>k</code> 또는 Oswald efficiency</li>
+<li><code>Cm0</code>, <code>Cma</code>, <code>Cmq</code></li>
+<li>elevator의 <code>dCL/dδe</code>, <code>dCD/dδe</code>, <code>dCm/dδe</code></li>
+<li>flap 단계별 polar 변화</li>
+<li>Mach/Reynolds/고도 조건</li>
+</ul>
+<h3>12.4 횡·방향 공력</h3>
+<ul>
+<li><code>CYβ</code>, <code>Clβ</code>, <code>Cnβ</code></li>
+<li><code>CYp</code>, <code>Clp</code>, <code>Cnp</code></li>
+<li><code>CYr</code>, <code>Clr</code>, <code>Cnr</code></li>
+<li>aileron/rudder/spoiler 조종 미계수</li>
+<li>adverse yaw와 aileron differential 정보</li>
+</ul>
+<h3>12.5 추진계</h3>
+<ul>
+<li>throttle 명령 규약</li>
+<li>motor/engine RPM 제한과 time constant</li>
+<li>RPM·airspeed·density별 추력과 토크 맵</li>
+<li>프로펠러 <code>CT</code>, <code>CQ</code>, <code>J</code> 곡선 또는 시험 데이터</li>
+<li>전력/연료 제한, 배터리 sag 또는 엔진 spool dynamics</li>
+<li>motor/engine failure 동작이 필요한지 여부</li>
+</ul>
+<h3>12.6 조종면과 actuator</h3>
+<ul>
+<li>중립각, 최소/최대각</li>
+<li>최대 각속도와 가속도</li>
+<li>deadband, backlash, 지연</li>
+<li>actuator mixing과 reversal</li>
+<li>고장 모드 요구사항</li>
+</ul>
+<h3>12.7 기준 비행 성능</h3>
+<ul>
+<li>trim 속도와 trim throttle</li>
+<li>stall 속도 및 stall 자세</li>
+<li>최대/순항 속도</li>
+<li>최대 상승률과 최소 sink rate</li>
+<li>최대 활공비와 해당 속도</li>
+<li>정상 선회 반경·bank·속도</li>
+<li>takeoff roll, rotation 속도, landing 속도</li>
+</ul>
+<div class="page-break"></div>
+
+<h2>13. 한화 데이터에서 시뮬레이터 항목으로의 매핑</h2>
+<table>
+<thead>
+<tr>
+<th>한화 제공 항목</th>
+<th>단순 LiftDrag</th>
+<th>AdvancedLiftDrag / 기타</th>
+<th>적용 위치</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>총질량</td>
+<td>동일</td>
+<td>동일</td>
+<td><code>&lt;inertial&gt;&lt;mass&gt;</code></td>
+</tr>
+<tr>
+<td>CG</td>
+<td>CP의 기준 변경 포함</td>
+<td>동일</td>
+<td>inertial pose / 링크 원점</td>
+</tr>
+<tr>
+<td>관성 텐서</td>
+<td>동일</td>
+<td>동일</td>
+<td><code>&lt;inertia&gt;</code></td>
+</tr>
+<tr>
+<td><code>S</code></td>
+<td>공력면별 <code>area</code> 분배</td>
+<td>모델 기준 <code>area</code></td>
+<td>aerodynamic plugin</td>
+</tr>
+<tr>
+<td><code>b</code>, <code>MAC</code>, <code>AR</code></td>
+<td>CP/면적에 간접 반영</td>
+<td><code>AR</code>, <code>mac</code> 직접 입력</td>
+<td>AdvancedLiftDrag</td>
+</tr>
+<tr>
+<td><code>CL0</code>, <code>CLa</code></td>
+<td><code>a0</code>, <code>cla</code>로 근사</td>
+<td>직접 입력</td>
+<td>aerodynamic plugin</td>
+</tr>
+<tr>
+<td><code>CD0</code>, drag polar</td>
+<td>기본 LiftDrag로 불충분</td>
+<td><code>CD0</code>, <code>eff</code> 등</td>
+<td>AdvancedLiftDrag 권장</td>
+</tr>
+<tr>
+<td><code>Cm0</code>, <code>Cma</code>, <code>Cmq</code></td>
+<td><code>cma</code>, <code>cm_delta</code> 일부</td>
+<td>직접 입력</td>
+<td>AdvancedLiftDrag 권장</td>
+</tr>
+<tr>
+<td><code>β</code>, <code>p</code>, <code>q</code>, <code>r</code> 미계수</td>
+<td>표현 제한</td>
+<td>직접 입력</td>
+<td>AdvancedLiftDrag 권장</td>
+</tr>
+<tr>
+<td>stall polar</td>
+<td><code>alpha_stall</code>, stall slope</td>
+<td>stall 계수/테이블</td>
+<td>aerodynamic plugin</td>
+</tr>
+<tr>
+<td>조종면 미계수</td>
+<td><code>control_joint_rad_to_cl</code></td>
+<td>surface별 6축 derivative</td>
+<td>control surface block</td>
+</tr>
+<tr>
+<td>변위/속도 제한</td>
+<td>joint limit/controller</td>
+<td>동일</td>
+<td>SDF joint/controller</td>
+</tr>
+<tr>
+<td>추력·토크 맵</td>
+<td>motor constant 근사</td>
+<td>custom map/plugin</td>
+<td>propulsion plugin</td>
+</tr>
+<tr>
+<td>외형 메시</td>
+<td>동일</td>
+<td>동일</td>
+<td>Gazebo/Unreal mesh</td>
+</tr>
+</tbody></table>
+<h2>14. 실제 구현 변경 목록</h2>
+<h3>14.1 Gazebo 모델</h3>
+<p>새 <code>hanwha_fixedwing/model.sdf</code>에 다음을 구현한다.</p>
+<ol>
+<li><code>base_link</code> 질량·CG·관성</li>
+<li>단순화 collision과 실제 visual mesh</li>
+<li>주익/꼬리/조종면 링크 및 조인트</li>
+<li>모든 조종면 <code>JointPositionController</code></li>
+<li>선택한 공력 플러그인과 계수</li>
+<li>추진계 플러그인 또는 custom thrust map</li>
+<li>IMU, barometer, magnetometer, GNSS와 airspeed 센서</li>
+<li><code>KinematicsPublisher</code> 250 Hz</li>
+</ol>
+<h3>14.2 PX4 airframe</h3>
+<p><code>4003_gz_rc_cessna</code>를 직접 덮어쓰지 않고 한화 전용 autostart ID를 추가한다.</p>
+<ul>
+<li>control surface 개수와 type</li>
+<li>roll/pitch/yaw torque effectiveness</li>
+<li>flap/spoiler/airbrake mapping</li>
+<li>servo function과 min/max angle</li>
+<li>motor function과 RPM 범위</li>
+<li>trim, rate controller, NPFG, TECS 초기값</li>
+</ul>
+<p>동역학이 바뀌면 기존 PX4 gain을 그대로 확정값으로 간주해서는 안 된다. 우선
+보수적인 값으로 비행 가능성을 확보한 뒤 SIL에서 재튜닝한다.</p>
+<h3>14.3 실행 스크립트</h3>
+<p>다음 선택 항목만 바꾸고 실행 순서와 브리지 구조는 유지한다.</p>
+<pre><code class="language-text">PX4_SYS_AUTOSTART=&lt;한화 전용 ID&gt;
+PX4_SIM_MODEL=gz_hanwha_fixedwing
+PX4_GZ_MODELS=&lt;한화 모델 root&gt;
+</code></pre>
+<h3>14.4 Unreal 외형</h3>
+<ul>
+<li>한화 외형 FBX/GLTF/OBJ import</li>
+<li>로컬 <code>+X</code>가 기수인지 확인</li>
+<li>Unreal Z-up 변환만 적용</li>
+<li>SceneCapture 자기 가림 정책 결정</li>
+<li>충돌은 Gazebo가 담당하므로 Unreal 시각 메시 collision은 비활성 유지</li>
+</ul>
+<h3>14.5 유지되는 인터페이스</h3>
+<p>기체명이 바뀌더라도 UCC 브리지로 전달되는 상태 벡터 계약은 유지한다.</p>
+<pre><code class="language-text">position, orientation quaternion
+linear/angular velocity
+linear/angular acceleration
+source timestamp
+</code></pre>
+<h2>15. 교체 후 검증 절차</h2>
+<h3>15.1 정적 검증</h3>
+<ul>
+<li>SDF schema와 plugin load 오류 0</li>
+<li>전체 질량 합과 제공 질량 일치</li>
+<li>CG 및 관성 텐서 좌표·단위 일치</li>
+<li>visual/collision/body axis 일치</li>
+<li>모든 servo/motor 토픽에 publisher와 subscriber 존재</li>
+<li>조종면 부호와 실제 회전 방향 확인</li>
+</ul>
+<h3>15.2 공력 단품 검증</h3>
+<ul>
+<li><code>alpha</code> sweep으로 <code>CL/CD/CM</code> 곡선 비교</li>
+<li><code>beta</code> sweep으로 <code>CY/Cl/Cn</code> 비교</li>
+<li>stall 진입 및 회복 방향 확인</li>
+<li>elevator/aileron/rudder/flap step별 6축 힘·모멘트 비교</li>
+<li>속도 변화에 따른 <code>q ∝ V²</code> 응답 확인</li>
+<li>고도/밀도와 wind 조건별 응답 확인</li>
+</ul>
+<h3>15.3 추진 단품 검증</h3>
+<ul>
+<li>throttle/RPM sweep</li>
+<li>정지 추력과 전진속도별 추력·토크 비교</li>
+<li>상승/하강 time constant 확인</li>
+<li>최대 RPM 및 saturation 확인</li>
+<li>motor torque 방향과 rolling moment 확인</li>
+</ul>
+<h3>15.4 trim과 비행 성능</h3>
+<ul>
+<li>여러 속도에서 level-flight trim 탐색</li>
+<li>trim elevator, pitch, throttle 기록</li>
+<li>stall 속도와 stall 자세</li>
+<li>glide ratio와 sink polar</li>
+<li>정상 상승률</li>
+<li>bank별 coordinated turn</li>
+<li>takeoff/landing 상태가 요구 범위에 드는지 확인</li>
+</ul>
+<h3>15.5 PX4 폐루프 시험</h3>
+<ul>
+<li>manual attitude step</li>
+<li>roll/pitch/yaw rate step</li>
+<li>waypoint tracking</li>
+<li>takeoff, loiter, RTL, landing</li>
+<li>actuator saturation 및 integrator wind-up 확인</li>
+<li>풍속/돌풍/난류 시나리오</li>
+</ul>
+<h3>15.6 UCC/VIO 회귀 시험</h3>
+<ul>
+<li>Gazebo source 250 Hz</li>
+<li>UCC state injection 100 Hz</li>
+<li>timestamp 중복/역행 0</li>
+<li>quaternion norm error 기준 통과</li>
+<li><code>cam0</code> 640×480, 10 Hz</li>
+<li>IMU/GT 100 Hz</li>
+<li>빈 이미지와 RPC 오류 0</li>
+<li>Unreal 외형의 기수·꼬리 방향 정상</li>
+</ul>
+<h2>16. 잠정 수용 기준</h2>
+<p>한화가 공식 오차 기준을 제공하기 전 사용할 잠정 기준이다. 공식 기준이 도착하면
+그 값으로 대체한다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>잠정 기준</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>질량/CG/관성</td>
+<td>제공 데이터와 단위·기준점까지 정확히 일치</td>
+</tr>
+<tr>
+<td>공력 force/moment curve</td>
+<td>제공 표 또는 해석 결과 대비 주요 운용 구간 ±5% 이내</td>
+</tr>
+<tr>
+<td>trim 속도/자세/추력</td>
+<td>기준점 대비 ±5% 이내 또는 합의 범위</td>
+</tr>
+<tr>
+<td>stall 속도</td>
+<td>기준값 대비 ±5% 이내</td>
+</tr>
+<tr>
+<td>조종면 부호·권한</td>
+<td>모든 축 방향 일치, saturation 원인 설명 가능</td>
+</tr>
+<tr>
+<td>추진 추력/토크</td>
+<td>제공 map 대비 주요 운용 구간 ±5% 이내</td>
+</tr>
+<tr>
+<td>비정상 토픽</td>
+<td>누락 publisher/subscriber 0</td>
+</tr>
+<tr>
+<td>물리 오류</td>
+<td>NaN/Inf, 폭주, timestamp 역행 0</td>
+</tr>
+<tr>
+<td>VIO 파이프라인</td>
+<td>기존 fixed-wing MVP 계약 전체 통과</td>
+</tr>
+</tbody></table>
+<h2>17. 한화 데이터 수령 체크리스트</h2>
+<ul>
+<li><input disabled="" type="checkbox"> 기체 버전/형상/탑재 구성 식별자</li>
+<li><input disabled="" type="checkbox"> 데이터 보안등급과 배포 제한</li>
+<li><input disabled="" type="checkbox"> 좌표계·원점·부호·단위 문서</li>
+<li><input disabled="" type="checkbox"> 질량, CG, full inertia tensor</li>
+<li><input disabled="" type="checkbox"> 주익/꼬리 기준 형상</li>
+<li><input disabled="" type="checkbox"> 전체 공력계수 표와 조건(Mach, Re, 고도)</li>
+<li><input disabled="" type="checkbox"> stall/post-stall 데이터</li>
+<li><input disabled="" type="checkbox"> 조종면 geometry, limit, rate, 6축 derivative</li>
+<li><input disabled="" type="checkbox"> 추진계 추력/토크/RPM 데이터</li>
+<li><input disabled="" type="checkbox"> 기준 비행 성능과 시험 로그</li>
+<li><input disabled="" type="checkbox"> CAD/mesh 및 단순화 허용 범위</li>
+<li><input disabled="" type="checkbox"> 센서 장착 위치와 지연/노이즈 모델</li>
+<li><input disabled="" type="checkbox"> 허용오차와 검증 시나리오</li>
+</ul>
+<h2>18. 주요 파일 위치</h2>
+<table>
+<thead>
+<tr>
+<th>역할</th>
+<th>파일</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>현행 실행 스크립트</td>
+<td><code>tools/fixedwing/ucc_fixedwing_mvp_v1/08_run_gz_rc_cessna_ucc.sh</code></td>
+</tr>
+<tr>
+<td>UCC wrapper model</td>
+<td><code>tools/fixedwing/ucc_fixedwing_mvp_v1/gz_models/rc_cessna_ucc/model.sdf</code></td>
+</tr>
+<tr>
+<td>PX4 RC Cessna model</td>
+<td><code>/home/boss/PX4-Autopilot/Tools/simulation/gz/models/rc_cessna/model.sdf</code></td>
+</tr>
+<tr>
+<td>PX4 airframe</td>
+<td><code>/home/boss/PX4-Autopilot/ROMFS/px4fmu_common/init.d-posix/airframes/4003_gz_rc_cessna</code></td>
+</tr>
+<tr>
+<td>PX4 servo bridge</td>
+<td><code>/home/boss/PX4-Autopilot/src/modules/simulation/gz_bridge/GZMixingInterfaceServo.cpp</code></td>
+</tr>
+<tr>
+<td>Gazebo world</td>
+<td><code>/home/boss/PX4-Autopilot/Tools/simulation/gz/worlds/default.sdf</code></td>
+</tr>
+<tr>
+<td>AdvancedLiftDrag 예제</td>
+<td><code>/usr/share/gz/gz-sim8/worlds/advanced_lift_drag_system.sdf</code></td>
+</tr>
+<tr>
+<td>UCC 상태 발행기</td>
+<td><code>tools/fixedwing/ucc_fixedwing_mvp_v1/gz_plugin/UccKinematicsPublisher.cpp</code></td>
+</tr>
+<tr>
+<td>Gazebo-UCC 브리지</td>
+<td><code>tools/fixedwing/ucc_fixedwing_mvp_v1/gazebo_airsim_bridge.py</code></td>
+</tr>
+<tr>
+<td>통합 상태 문서</td>
+<td><code>docs/FIXEDWING_INTEGRATION_STATUS.md</code></td>
+</tr>
+</tbody></table>
+<h2>부록 A. 교체 시 지켜야 할 설계 원칙</h2>
+<ol>
+<li>upstream PX4 model을 직접 수정하지 않는다.</li>
+<li>한화 모델과 기준 <code>rc_cessna</code>를 나란히 실행 가능하게 유지한다.</li>
+<li>좌표계와 단위를 파일 상단 주석에 명시한다.</li>
+<li>모든 공력계수에는 출처·조건·버전을 기록한다.</li>
+<li>조종면 topic, joint, 공력 surface의 3단 연결을 자동 검사한다.</li>
+<li>공력계수 변경과 PX4 gain 변경을 한 번에 섞지 않는다.</li>
+<li>open-loop 공력 검증 후 PX4 closed-loop 시험을 수행한다.</li>
+<li>Gazebo GT와 UCC/Unreal GT가 동일 상태인지 항상 회귀 검사한다.</li>
+<li>기체 외형 방향은 메시 자체의 <code>+X nose</code>를 확인한 뒤 보정한다.</li>
+<li>한화 제공 데이터가 없는 항목은 임의 확정하지 않고 가정으로 표시한다.</li>
+</ol>
+<h2>부록 B. 현재 확인된 후속 작업</h2>
+<ol>
+<li>기준 <code>rc_cessna</code>의 좌·우 플랩 <code>JointPositionController</code> 연결</li>
+<li>공력 force/moment sweep 자동 시험기 추가</li>
+<li><code>AdvancedLiftDrag</code> 기반 한화 모델 template 준비</li>
+<li>propulsion map 입력 형식 정의</li>
+<li>mass/CG/inertia 및 control topic 자동 감사 도구 추가</li>
+<li>VIO 회귀 시험과 공력 검증 리포트의 통합</li>
+</ol>
+<hr>
+<p>본 문서는 한화 실기체 데이터가 들어오기 전의 기준본이다. 실제 데이터 적용 시
+기체 식별자, 데이터 출처, 계수 버전, 변경 파일, 검증 결과와 승인자를 문서
+revision history에 추가한다.</p>
+
+</body>
+</html>

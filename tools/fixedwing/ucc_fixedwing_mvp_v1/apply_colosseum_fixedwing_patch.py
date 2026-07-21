@@ -168,9 +168,9 @@ FIXED_WING_BEGIN_PLAY = r'''void AFlyingPawn::BeginPlay()
             fixed_wing_visual_->SetupAttachment(GetRootComponent());
             fixed_wing_visual_->SetAbsolute(false, false, true);
             fixed_wing_visual_->SetRelativeLocation(FVector(7.0f, 0.0f, -8.0f));
-            // Imported FBX axes are -X forward, +Z right, +Y up. Rotate them
-            // into AirSim / Unreal body axes: +X forward, +Y right, +Z up.
-            fixed_wing_visual_->SetRelativeRotation(FRotator(0.0f, 180.0f, 90.0f));
+            // The imported FBX already uses +X as the aircraft nose direction.
+            // Remap only its Y-up / Z-lateral axes into Unreal Z-up / Y-right.
+            fixed_wing_visual_->SetRelativeRotation(FRotator(0.0f, 0.0f, 90.0f));
             fixed_wing_visual_->SetRelativeScale3D(FVector(0.1f));
             fixed_wing_visual_->SetCollisionEnabled(ECollisionEnabled::NoCollision);
             fixed_wing_visual_->SetHiddenInSceneCapture(true);
@@ -241,6 +241,30 @@ def patch_flying_pawn_source(path: Path) -> bool:
 """,
             f"{path.name} EndPlay",
         )
+    legacy_visual_rotation = (
+        "fixed_wing_visual_->SetRelativeRotation("
+        "FRotator(0.0f, 180.0f, 90.0f));"
+    )
+    corrected_visual_rotation = (
+        "fixed_wing_visual_->SetRelativeRotation("
+        "FRotator(0.0f, 0.0f, 90.0f));"
+    )
+    if legacy_visual_rotation in text:
+        text = replace_once(
+            text,
+            legacy_visual_rotation,
+            corrected_visual_rotation,
+            f"{path.name} fixed-wing nose direction",
+        )
+        text = text.replace(
+            "// Imported FBX axes are -X forward, +Z right, +Y up. Rotate them\n"
+            "            // into AirSim / Unreal body axes: +X forward, +Y right, +Z up.",
+            "// The imported FBX already uses +X as the aircraft nose direction.\n"
+            "            // Remap only its Y-up / Z-lateral axes into Unreal Z-up / Y-right.",
+            1,
+        )
+    if corrected_visual_rotation not in text:
+        raise RuntimeError(f"{path.name}: fixed-wing visual rotation is missing")
     return write_changed(path, text) if text != original else False
 
 

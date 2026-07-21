@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 import shutil
 import sys
@@ -37,6 +38,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camera-down-m", type=float, default=0.0)
     parser.add_argument("--camera-pitch-deg", type=float, default=-30.0)
     parser.add_argument("--observer-follow-distance-m", type=int, default=-2)
+    parser.add_argument(
+        "--spawn-altitude-m",
+        type=float,
+        help=(
+            "optional local altitude above the Unreal PlayerStart; writes the "
+            "AirSim NED vehicle Z value as the negative of this altitude"
+        ),
+    )
     parser.add_argument("--no-backup", action="store_true")
     return parser.parse_args()
 
@@ -62,6 +71,11 @@ def require_mapping(parent: dict, key: str, context: str) -> dict:
 
 def main() -> int:
     args = parse_args()
+    if args.spawn_altitude_m is not None and (
+        not math.isfinite(args.spawn_altitude_m) or args.spawn_altitude_m <= 0.0
+    ):
+        raise SystemExit("[ERROR] --spawn-altitude-m must be a positive number")
+
     source = args.settings.expanduser().resolve()
     output = (args.output or source).expanduser().resolve()
     data = load_settings(source)
@@ -89,6 +103,8 @@ def main() -> int:
 
     drone["VehicleType"] = "SimpleFlight"
     drone["AutoCreate"] = True
+    if args.spawn_altitude_m is not None:
+        drone["Z"] = -args.spawn_altitude_m
     camera.update(
         {
             "X": args.camera_forward_m,
@@ -156,6 +172,11 @@ def main() -> int:
         f"[OK] {args.camera} mount X={args.camera_forward_m:.3f} m, "
         f"Z={args.camera_down_m:.3f} m, Pitch={args.camera_pitch_deg:.1f} deg"
     )
+    if args.spawn_altitude_m is not None:
+        print(
+            f"[OK] {args.vehicle} local spawn altitude="
+            f"{args.spawn_altitude_m:.1f} m (NED Z={-args.spawn_altitude_m:.1f} m)"
+        )
     print(f"[OK] {args.camera} Scene capture=640x480, FOV=90 deg, motion blur=0")
     if args.profile == "validation":
         print("[OK] AirSim IMU random walk and bias stability disabled for axis tests")

@@ -31,6 +31,11 @@ class CaptureState:
     imu_timestamps: list[int] = field(default_factory=list)
     gt_timestamps: list[int] = field(default_factory=list)
     camera_jitter_ms: list[float] = field(default_factory=list)
+    camera_mapping_error_ms: list[float] = field(default_factory=list)
+    camera_mapping_error_by_target_ns: dict[int, float] = field(
+        default_factory=dict
+    )
+    gt_mapping_error_by_target_ns: dict[int, float] = field(default_factory=dict)
     inertial_jitter_ms: list[float] = field(default_factory=list)
     camera_stddev: list[float] = field(default_factory=list)
     camera_white_ratio: list[float] = field(default_factory=list)
@@ -60,9 +65,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--imu-hz", type=float, default=100.0)
     parser.add_argument("--start-delay-sec", type=float, default=1.0)
     parser.add_argument("--camera-warmup-timeout-sec", type=float, default=30.0)
+    parser.add_argument("--max-camera-source-gap-ms", type=float)
+    parser.add_argument("--max-camera-schedule-jitter-ms", type=float)
+    parser.add_argument("--max-camera-gt-skew-ms", type=float)
     parser.add_argument("--vehicle", default="Drone1")
     parser.add_argument("--camera", default="cam0")
     parser.add_argument("--imu", default="Imu")
+    parser.add_argument("--nominal-altitude-m", type=float)
+    parser.add_argument("--altitude-tolerance-m", type=float)
+    parser.add_argument(
+        "--altitude-reference-ned-z-m",
+        type=float,
+        help=(
+            "NED Z corresponding to the nominal altitude; defaults to the "
+            "position measured immediately before recording"
+        ),
+    )
+    parser.add_argument("--required-turn-bank-deg", type=float)
+    parser.add_argument("--max-abs-roll-deg", type=float)
+    parser.add_argument("--minimum-straight-fraction", type=float)
+    parser.add_argument("--straight-bank-deg", type=float, default=3.0)
+    parser.add_argument(
+        "--ready-file",
+        type=Path,
+        help="write a marker after camera warm-up and output initialization",
+    )
     return parser.parse_args()
 
 
@@ -100,6 +127,43 @@ def numeric_stats(values: list[float]) -> dict[str, float | None]:
         "p95": percentile(values, 95),
         "max": max(values),
     }
+
+
+def mapping_error_stats(values: list[float]) -> dict[str, float | int | None]:
+    if not values:
+        return {
+            "count": 0,
+            "min": None,
+            "max": None,
+            "span": None,
+            "mean_abs": None,
+            "p95_abs": None,
+        }
+    absolute = [abs(value) for value in values]
+    minimum = min(values)
+    maximum = max(values)
+    return {
+        "count": len(values),
+        "min": minimum,
+        "max": maximum,
+        "span": maximum - minimum,
+        "mean_abs": statistics.fmean(absolute),
+        "p95_abs": percentile(absolute, 95),
+    }
+
+
+def cross_sensor_mapping_stats(
+    camera_by_target_ns: dict[int, float],
+    ground_truth_by_target_ns: dict[int, float],
+) -> dict[str, float | int | None]:
+    deltas_ms = [
+        camera_error_ms - ground_truth_by_target_ns[target_ns]
+        for target_ns, camera_error_ms in camera_by_target_ns.items()
+        if target_ns in ground_truth_by_target_ns
+    ]
+    stats = mapping_error_stats(deltas_ms)
+    stats["max_abs"] = max((abs(value) for value in deltas_ms), default=None)
+    return stats
 
 
 def timestamp_stats(values: list[int]) -> dict[str, Any]:
@@ -250,6 +314,12 @@ def camera_worker(
                 mapping_writer.writerow([target_ns, source_ns, source_ns - target_ns])
 
                 state.camera_timestamps.append(source_ns)
+                state.camera_mapping_error_ms.append(
+                    (source_ns - target_ns) * 1.0e-6
+                )
+                state.camera_mapping_error_by_target_ns[target_ns] = (
+                    source_ns - target_ns
+                ) * 1.0e-6
                 state.camera_stddev.append(channel_stddev)
                 state.camera_white_ratio.append(white_ratio)
                 state.camera_dimensions.add((response.width, response.height))
@@ -397,6 +467,9 @@ def inertial_worker(
                     ]
                 )
                 gt_map_writer.writerow([target_ns, source_ns, source_ns - target_ns])
+                state.gt_mapping_error_by_target_ns[target_ns] = (
+                    source_ns - target_ns
+                ) * 1.0e-6
                 quaternion_norm = math.sqrt(
                     orientation.w_val**2
                     + orientation.x_val**2
@@ -447,10 +520,129 @@ def motion_stats(state: CaptureState) -> dict[str, float | None]:
     }
 
 
+def local_altitude_stats(
+    positions: list[tuple[float, float, float]],
+    reference_ned_z_m: float,
+    nominal_altitude_m: float,
+    tolerance_m: float,
+) -> dict[str, float | int | bool | None]:
+    if not positions:
+        return {
+            "all_within_bounds": False,
+            "count": 0,
+            "min_m": None,
+            "max_m": None,
+            "mean_m": None,
+            "lower_bound_m": nominal_altitude_m - tolerance_m,
+            "upper_bound_m": nominal_altitude_m + tolerance_m,
+            "out_of_bounds_samples": 0,
+        }
+
+    altitudes = [
+        nominal_altitude_m - (z - reference_ned_z_m)
+        for _, _, z in positions
+    ]
+    lower = nominal_altitude_m - tolerance_m
+    upper = nominal_altitude_m + tolerance_m
+    out_of_bounds = sum(not lower <= altitude <= upper for altitude in altitudes)
+    return {
+        "all_within_bounds": out_of_bounds == 0,
+        "count": len(altitudes),
+        "min_m": min(altitudes),
+        "max_m": max(altitudes),
+        "mean_m": statistics.fmean(altitudes),
+        "lower_bound_m": lower,
+        "upper_bound_m": upper,
+        "out_of_bounds_samples": out_of_bounds,
+    }
+
+
+def turn_straight_stats(
+    roll_deg: list[float],
+    required_turn_bank_deg: float | None,
+    max_abs_roll_deg: float | None,
+    straight_bank_deg: float,
+    minimum_straight_fraction: float | None,
+) -> dict[str, float | bool | None]:
+    if not roll_deg:
+        return {
+            "all_pass": False,
+            "min_roll_deg": None,
+            "max_roll_deg": None,
+            "max_abs_roll_deg": None,
+            "straight_fraction": None,
+            "left_turn_present": False,
+            "right_turn_present": False,
+            "within_roll_limit": False,
+            "straight_present": False,
+        }
+
+    min_roll = min(roll_deg)
+    max_roll = max(roll_deg)
+    measured_max_abs_roll = max(abs(value) for value in roll_deg)
+    straight_fraction = sum(
+        abs(value) <= straight_bank_deg for value in roll_deg
+    ) / len(roll_deg)
+    left_turn_present = (
+        required_turn_bank_deg is None or min_roll <= -required_turn_bank_deg
+    )
+    right_turn_present = (
+        required_turn_bank_deg is None or max_roll >= required_turn_bank_deg
+    )
+    within_roll_limit = (
+        max_abs_roll_deg is None or measured_max_abs_roll <= max_abs_roll_deg
+    )
+    straight_present = (
+        minimum_straight_fraction is None
+        or straight_fraction >= minimum_straight_fraction
+    )
+    return {
+        "all_pass": (
+            left_turn_present
+            and right_turn_present
+            and within_roll_limit
+            and straight_present
+        ),
+        "min_roll_deg": min_roll,
+        "max_roll_deg": max_roll,
+        "max_abs_roll_deg": measured_max_abs_roll,
+        "straight_fraction": straight_fraction,
+        "left_turn_present": left_turn_present,
+        "right_turn_present": right_turn_present,
+        "within_roll_limit": within_roll_limit,
+        "straight_present": straight_present,
+    }
+
+
 def main() -> int:
     args = parse_args()
     if min(args.duration_sec, args.camera_hz, args.imu_hz) <= 0.0:
         raise SystemExit("[ERROR] duration and rates must be positive")
+    if (args.nominal_altitude_m is None) != (args.altitude_tolerance_m is None):
+        raise SystemExit(
+            "[ERROR] --nominal-altitude-m and --altitude-tolerance-m "
+            "must be supplied together"
+        )
+    if args.altitude_tolerance_m is not None and args.altitude_tolerance_m <= 0.0:
+        raise SystemExit("[ERROR] --altitude-tolerance-m must be positive")
+    camera_timing_limits = (
+        ("--max-camera-source-gap-ms", args.max_camera_source_gap_ms),
+        ("--max-camera-schedule-jitter-ms", args.max_camera_schedule_jitter_ms),
+        ("--max-camera-gt-skew-ms", args.max_camera_gt_skew_ms),
+    )
+    for option, value in camera_timing_limits:
+        if value is not None and value <= 0.0:
+            raise SystemExit(f"[ERROR] {option} must be positive")
+    if args.required_turn_bank_deg is not None and args.required_turn_bank_deg <= 0.0:
+        raise SystemExit("[ERROR] --required-turn-bank-deg must be positive")
+    if args.max_abs_roll_deg is not None and args.max_abs_roll_deg <= 0.0:
+        raise SystemExit("[ERROR] --max-abs-roll-deg must be positive")
+    if not 0.0 <= args.straight_bank_deg <= 90.0:
+        raise SystemExit("[ERROR] --straight-bank-deg must be in [0, 90]")
+    if args.minimum_straight_fraction is not None and not (
+        0.0 <= args.minimum_straight_fraction <= 1.0
+    ):
+        raise SystemExit("[ERROR] --minimum-straight-fraction must be in [0, 1]")
     output = args.output.expanduser().resolve()
     if output.exists():
         raise SystemExit(f"[ERROR] output already exists: {output}")
@@ -469,6 +661,14 @@ def main() -> int:
         args.camera_warmup_timeout_sec,
     )
     print(f"[CAMERA_READY] {json.dumps(camera_warmup, sort_keys=True)}")
+    initial_kinematics = control.simGetGroundTruthKinematics(
+        vehicle_name=args.vehicle
+    )
+    altitude_reference_ned_z_m = (
+        args.altitude_reference_ned_z_m
+        if args.altitude_reference_ned_z_m is not None
+        else float(initial_kinematics.position.z_val)
+    )
 
     for relative in (
         "mav0/cam0/data",
@@ -495,10 +695,40 @@ def main() -> int:
         "acceleration_source": "Gazebo WorldLinearAcceleration component",
         "frame_contract": "Gazebo ENU/FLU to AirSim NED/FRD",
         "camera_warmup": camera_warmup,
+        "camera_timing_contract": {
+            "max_source_gap_ms": args.max_camera_source_gap_ms,
+            "max_schedule_jitter_ms": args.max_camera_schedule_jitter_ms,
+            "max_camera_gt_skew_ms": args.max_camera_gt_skew_ms,
+        },
+        "flight_contract": {
+            "nominal_altitude_m": args.nominal_altitude_m,
+            "altitude_tolerance_m": args.altitude_tolerance_m,
+            "altitude_reference_ned_z_m": altitude_reference_ned_z_m,
+            "required_turn_bank_deg": args.required_turn_bank_deg,
+            "max_abs_roll_deg": args.max_abs_roll_deg,
+            "straight_bank_deg": args.straight_bank_deg,
+            "minimum_straight_fraction": args.minimum_straight_fraction,
+        },
     }
     (output / "run_config.json").write_text(
         json.dumps(run_config, indent=2) + "\n", encoding="utf-8"
     )
+    if args.ready_file is not None:
+        ready_file = args.ready_file.expanduser().resolve()
+        ready_file.parent.mkdir(parents=True, exist_ok=True)
+        ready_file.write_text(
+            json.dumps(
+                {
+                    "output": str(output),
+                    "start_delay_sec": args.start_delay_sec,
+                    "altitude_reference_ned_z_m": altitude_reference_ned_z_m,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"[CAPTURE_READY] {ready_file}")
 
     state = CaptureState()
 
@@ -545,10 +775,75 @@ def main() -> int:
     expected_camera = int(round(args.duration_sec * args.camera_hz))
     expected_inertial = int(round(args.duration_sec * args.imu_hz))
     camera_time = timestamp_stats(state.camera_timestamps)
+    camera_schedule_jitter = numeric_stats(state.camera_jitter_ms)
+    camera_mapping_error = mapping_error_stats(state.camera_mapping_error_ms)
+    camera_gt_skew = cross_sensor_mapping_stats(
+        state.camera_mapping_error_by_target_ns,
+        state.gt_mapping_error_by_target_ns,
+    )
     imu_time = timestamp_stats(state.imu_timestamps)
     gt_time = timestamp_stats(state.gt_timestamps)
     dimensions = sorted([list(value) for value in state.camera_dimensions])
     accepted_dimensions = dimensions == [[640, 480]]
+    altitude = (
+        local_altitude_stats(
+            state.gt_positions,
+            altitude_reference_ned_z_m,
+            args.nominal_altitude_m,
+            args.altitude_tolerance_m,
+        )
+        if args.nominal_altitude_m is not None
+        and args.altitude_tolerance_m is not None
+        else None
+    )
+    flight_dynamics = turn_straight_stats(
+        state.gt_roll_deg,
+        args.required_turn_bank_deg,
+        args.max_abs_roll_deg,
+        args.straight_bank_deg,
+        args.minimum_straight_fraction,
+    )
+    altitude_pass = altitude is None or bool(altitude["all_within_bounds"])
+    dynamics_validation_enabled = any(
+        value is not None
+        for value in (
+            args.required_turn_bank_deg,
+            args.max_abs_roll_deg,
+            args.minimum_straight_fraction,
+        )
+    )
+    dynamics_pass = (
+        not dynamics_validation_enabled or bool(flight_dynamics["all_pass"])
+    )
+    camera_source_gap_pass = (
+        args.max_camera_source_gap_ms is None
+        or (
+            camera_time["period_ms"]["max"] is not None
+            and camera_time["period_ms"]["max"]
+            <= args.max_camera_source_gap_ms
+        )
+    )
+    camera_schedule_jitter_pass = (
+        args.max_camera_schedule_jitter_ms is None
+        or (
+            camera_schedule_jitter["max"] is not None
+            and camera_schedule_jitter["max"]
+            <= args.max_camera_schedule_jitter_ms
+        )
+    )
+    camera_gt_skew_pass = (
+        args.max_camera_gt_skew_ms is None
+        or (
+            camera_gt_skew["count"] == state.camera_written
+            and camera_gt_skew["max_abs"] is not None
+            and camera_gt_skew["max_abs"] <= args.max_camera_gt_skew_ms
+        )
+    )
+    camera_timing_pass = (
+        camera_source_gap_pass
+        and camera_schedule_jitter_pass
+        and camera_gt_skew_pass
+    )
     all_pass = (
         not state.errors
         and state.camera_written == expected_camera
@@ -558,9 +853,14 @@ def main() -> int:
         and accepted_dimensions
         and camera_time["duplicates"] == 0
         and camera_time["regressions"] == 0
+        and camera_timing_pass
+        and imu_time["duplicates"] == 0
         and imu_time["regressions"] == 0
+        and gt_time["duplicates"] == 0
         and gt_time["regressions"] == 0
         and max(state.quaternion_norm_error, default=math.inf) < 1.0e-4
+        and altitude_pass
+        and dynamics_pass
     )
     report = {
         "all_pass": all_pass,
@@ -585,8 +885,28 @@ def main() -> int:
             "imu": imu_time,
             "gt": gt_time,
         },
+        "camera_timing_contract": {
+            "all_pass": camera_timing_pass,
+            "max_source_gap_ms": {
+                "limit": args.max_camera_source_gap_ms,
+                "measured": camera_time["period_ms"]["max"],
+                "pass": camera_source_gap_pass,
+            },
+            "max_schedule_jitter_ms": {
+                "limit": args.max_camera_schedule_jitter_ms,
+                "measured": camera_schedule_jitter["max"],
+                "pass": camera_schedule_jitter_pass,
+            },
+            "max_camera_gt_skew_ms": {
+                "limit": args.max_camera_gt_skew_ms,
+                "measured": camera_gt_skew["max_abs"],
+                "pass": camera_gt_skew_pass,
+            },
+            "mapping_error_ms": camera_mapping_error,
+            "camera_minus_gt_source_time_ms": camera_gt_skew,
+        },
         "schedule_jitter_ms": {
-            "camera": numeric_stats(state.camera_jitter_ms),
+            "camera": camera_schedule_jitter,
             "imu_gt": numeric_stats(state.inertial_jitter_ms),
         },
         "camera_quality": {
@@ -600,6 +920,8 @@ def main() -> int:
         "imu_acceleration_norm_mps2": numeric_stats(state.imu_accel_norm),
         "ground_truth": {
             **motion_stats(state),
+            "local_altitude": altitude,
+            "flight_dynamics": flight_dynamics,
             "max_quaternion_norm_error": max(
                 state.quaternion_norm_error, default=None
             ),
