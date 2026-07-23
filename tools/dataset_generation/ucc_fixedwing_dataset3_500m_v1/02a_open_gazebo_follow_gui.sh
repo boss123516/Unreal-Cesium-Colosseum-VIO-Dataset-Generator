@@ -3,6 +3,9 @@ set -euo pipefail
 
 MODEL_NAME="${GAZEBO_FOLLOW_MODEL:-rc_cessna_ucc_0}"
 GUI_CONFIG="${GZ_GUI_CONFIG:-$HOME/.gz/sim/8/gui.config}"
+FOLLOW_X="${GAZEBO_FOLLOW_X:--5}"
+FOLLOW_Y="${GAZEBO_FOLLOW_Y:-0}"
+FOLLOW_Z="${GAZEBO_FOLLOW_Z:-2}"
 
 if [[ ! -f "$GUI_CONFIG" ]]; then
   echo "[ERROR] Gazebo GUI config not found: $GUI_CONFIG" >&2
@@ -60,8 +63,10 @@ gz service -s /gui/follow/offset \
   --reqtype gz.msgs.Vector3d \
   --reptype gz.msgs.Boolean \
   --timeout 3000 \
-  --req 'x: -12, y: 0, z: 4' >/dev/null
+  --req "x: $FOLLOW_X, y: $FOLLOW_Y, z: $FOLLOW_Z" >/dev/null
 
-echo "[GAZEBO_FOLLOW_READY] model=$MODEL_NAME offset=(-12,0,4)"
+echo \
+  "[GAZEBO_FOLLOW_READY] model=$MODEL_NAME " \
+  "offset=($FOLLOW_X,$FOLLOW_Y,$FOLLOW_Z)"
 wait "$gui_pid"
 trap - EXIT INT TERM

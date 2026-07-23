@@ -1,0 +1,40 @@
+{
+  "name": "kau_5km_buildings",
+  "description": "한국항공대학교 캠퍼스 중심 반경 5 km 건축물",
+  "center": {
+    "latitude": 37.60025,
+    "longitude": 126.86519,
+    "label": "한국항공대학교 캠퍼스 중심"
+  },
+  "radius_m": 5000.0,
+  "bbox_wgs84_lon_lat": [
+    126.80849871858534,
+    37.55533423579403,
+    126.92188128141466,
+    37.64516576420598
+  ],
+  "source": {
+    "provider": "국토교통부 / 브이월드",
+    "service": "WFS",
+    "endpoint": "https://api.vworld.kr/req/wfs",
+    "typename": "lt_c_bldginfo",
+    "dataset_name": "GIS건물통합정보",
+    "output_crs": "EPSG:4326"
+  },
+  "collection": {
+    "initial_tile_size_m": 500.0,
+    "minimum_tile_size_m": 31.25,
+    "max_features_per_request": 1000,
+    "include_rule": "footprint_intersects_circle"
+  },
+  "height_policy": {
+    "measured_field": "height",
+    "floor_field": "grnd_flr",
+    "average_floor_height_m": 3.2,
+    "default_height_m": 9.6,
+    "valid_measured_height_range_m": [
+      1.5,
+      700.0
+    ]
+  }
+}

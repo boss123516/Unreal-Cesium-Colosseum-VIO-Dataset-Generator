@@ -1,0 +1,5 @@
+mapbox-earcut==1.0.3
+numpy==1.26.4
+pyproj==3.7.1
+shapely==2.1.1
+trimesh==4.7.1

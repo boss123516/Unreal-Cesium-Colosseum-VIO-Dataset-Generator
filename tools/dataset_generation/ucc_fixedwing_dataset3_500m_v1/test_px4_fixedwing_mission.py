@@ -14,6 +14,7 @@ from px4_fixedwing_mission import (  # noqa: E402
     MAV_CMD_NAV_LOITER_UNLIM,
     VehicleSnapshot,
     build_dynamic_mission,
+    build_kau_figure8_mission,
     build_prepare_mission,
     track_offset_to_global,
     wait_px4_heartbeat,
@@ -87,6 +88,44 @@ class Px4FixedWingMissionTest(unittest.TestCase):
         self.assertTrue(
             all(item.relative_altitude_m == 100.0 for item in mission)
         )
+
+    def test_kau_figure8_stays_near_anchor_and_has_both_loops(self):
+        radius_m = 260.0
+        mission = build_kau_figure8_mission(
+            self.snapshot,
+            180.0,
+            19.0,
+            radius_m,
+        )
+        navigation = [
+            item
+            for item in mission
+            if item.forward_m is not None
+            and item.command != MAV_CMD_NAV_LOITER_UNLIM
+        ]
+        right_offsets = [float(item.right_m) for item in navigation]
+        forward_offsets = [float(item.forward_m) for item in navigation]
+        altitude_offsets = [
+            float(item.altitude_offset_m) for item in navigation
+        ]
+        self.assertLess(min(right_offsets), -500.0)
+        self.assertGreater(max(right_offsets), 500.0)
+        self.assertLessEqual(max(abs(value) for value in forward_offsets), radius_m)
+        self.assertLessEqual(max(abs(value) for value in altitude_offsets), 10.0)
+        self.assertEqual(mission[-1].command, MAV_CMD_NAV_LOITER_UNLIM)
+        self.assertEqual(
+            sum(item.command == MAV_CMD_DO_CHANGE_SPEED for item in mission), 1
+        )
+        self.assertEqual([item.seq for item in mission], list(range(len(mission))))
+
+        route_length = 0.0
+        previous = (0.0, 0.0)
+        for item in navigation:
+            current = (float(item.forward_m), float(item.right_m))
+            route_length += math.dist(previous, current)
+            previous = current
+        self.assertGreater(route_length, 19.0 * 160.0)
+        self.assertLess(route_length, 19.0 * 180.0)
 
     def test_heartbeat_filter_ignores_forwarded_gcs(self):
         class Message:

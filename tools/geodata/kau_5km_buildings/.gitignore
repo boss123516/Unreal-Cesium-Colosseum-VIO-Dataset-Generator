@@ -1,0 +1,6 @@
+.secret/
+.venv/
+dem/
+output/
+__pycache__/
+*.part

@@ -259,6 +259,95 @@ def build_dynamic_mission(
     ]
 
 
+def build_kau_figure8_mission(
+    snapshot: VehicleSnapshot,
+    duration_sec: float,
+    speed_mps: float,
+    orbit_radius_m: float,
+) -> list[MissionItem]:
+    """Build two tangent circles around the bridge anchor.
+
+    Track coordinates use +forward along the aircraft heading and +right.
+    The first circle is centered to the right of the anchor and the second to
+    the left. Both return through the anchor with a forward tangent, producing
+    a continuous figure-eight with right and left bank.
+    """
+    if duration_sec <= 0.0 or speed_mps <= 0.0:
+        raise ValueError("duration and speed must be positive")
+    if orbit_radius_m < 150.0:
+        raise ValueError("KAU figure-eight radius must be at least 150 m")
+
+    segment_count_per_circle = 16
+    altitude_amplitude_m = 10.0
+    mission: list[MissionItem] = []
+
+    for circle_label, center_right_m, lateral_sign in (
+        ("right", +orbit_radius_m, +1.0),
+        ("left", -orbit_radius_m, -1.0),
+    ):
+        for segment in range(1, segment_count_per_circle + 1):
+            theta = 2.0 * math.pi * segment / segment_count_per_circle
+            forward_m = orbit_radius_m * math.sin(theta)
+            right_m = center_right_m - lateral_sign * orbit_radius_m * math.cos(
+                theta
+            )
+            altitude_offset_m = altitude_amplitude_m * math.sin(theta)
+            latitude_deg, longitude_deg = track_offset_to_global(
+                snapshot.latitude_deg,
+                snapshot.longitude_deg,
+                snapshot.heading_deg,
+                forward_m,
+                right_m,
+            )
+            mission.append(
+                navigation_item(
+                    len(mission),
+                    MAV_CMD_NAV_WAYPOINT,
+                    latitude_deg,
+                    longitude_deg,
+                    snapshot.relative_altitude_m + altitude_offset_m,
+                    f"kau_{circle_label}_orbit_{segment:02d}",
+                    acceptance_radius_m=25.0,
+                    forward_m=forward_m,
+                    right_m=right_m,
+                    altitude_offset_m=altitude_offset_m,
+                )
+            )
+
+            if len(mission) == 1:
+                mission.append(
+                    MissionItem(
+                        seq=1,
+                        frame=MAV_FRAME_MISSION,
+                        command=MAV_CMD_DO_CHANGE_SPEED,
+                        param1=0.0,
+                        param2=speed_mps,
+                        param3=-1.0,
+                        param4=0.0,
+                        label="set_airspeed",
+                    )
+                )
+
+    mission.append(
+        navigation_item(
+            len(mission),
+            MAV_CMD_NAV_LOITER_UNLIM,
+            snapshot.latitude_deg,
+            snapshot.longitude_deg,
+            snapshot.relative_altitude_m,
+            "kau_anchor_final_loiter",
+            loiter_radius_m=orbit_radius_m,
+            forward_m=0.0,
+            right_m=0.0,
+            altitude_offset_m=0.0,
+        )
+    )
+    return [
+        MissionItem(**{**asdict(item), "seq": index})
+        for index, item in enumerate(mission)
+    ]
+
+
 def mission_metadata(
     phase: str,
     snapshot: VehicleSnapshot,
@@ -276,7 +365,10 @@ def mission_metadata(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase", choices=("prepare", "dynamic"))
+    parser.add_argument(
+        "phase",
+        choices=("prepare", "dynamic", "kau_figure8"),
+    )
     parser.add_argument("--endpoint", default="udpin:0.0.0.0:14550")
     parser.add_argument("--connect-timeout-sec", type=float, default=10.0)
     parser.add_argument("--output", type=Path)
@@ -290,6 +382,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--duration-sec", type=float, default=180.0)
     parser.add_argument("--speed-mps", type=float, default=19.0)
     parser.add_argument("--bank-limit-deg", type=float, default=28.0)
+    parser.add_argument("--orbit-radius-m", type=float, default=260.0)
     return parser.parse_args()
 
 
@@ -617,6 +710,27 @@ def main() -> int:
         raise SystemExit("[ERROR] duration and speed must be positive")
     if not 0.0 < args.bank_limit_deg <= 50.0:
         raise SystemExit("[ERROR] bank limit must be in (0, 50] degrees")
+    if args.phase == "kau_figure8" and args.orbit_radius_m < 150.0:
+        raise SystemExit("[ERROR] KAU figure-eight radius must be at least 150 m")
+
+    def build_selected_mission(snapshot: VehicleSnapshot) -> list[MissionItem]:
+        if args.phase == "prepare":
+            return build_prepare_mission(
+                snapshot,
+                args.target_relative_altitude_m,
+            )
+        if args.phase == "kau_figure8":
+            return build_kau_figure8_mission(
+                snapshot,
+                args.duration_sec,
+                args.speed_mps,
+                args.orbit_radius_m,
+            )
+        return build_dynamic_mission(
+            snapshot,
+            args.duration_sec,
+            args.speed_mps,
+        )
 
     if args.dry_run:
         snapshot = VehicleSnapshot(
@@ -626,11 +740,7 @@ def main() -> int:
             args.heading_deg % 360.0,
             args.speed_mps,
         )
-        mission = (
-            build_prepare_mission(snapshot, args.target_relative_altitude_m)
-            if args.phase == "prepare"
-            else build_dynamic_mission(snapshot, args.duration_sec, args.speed_mps)
-        )
+        mission = build_selected_mission(snapshot)
         metadata = mission_metadata(
             args.phase,
             snapshot,
@@ -717,7 +827,7 @@ def main() -> int:
             "FW_R_LIM",
             args.bank_limit_deg,
         )
-        mission = build_dynamic_mission(snapshot, args.duration_sec, args.speed_mps)
+        mission = build_selected_mission(snapshot)
         upload_mission(connection, mavutil, mission)
         connection.mav.mission_set_current_send(
             connection.target_system,
@@ -726,7 +836,7 @@ def main() -> int:
         )
         wait_flight_mode(connection, mavutil, "MISSION", 10.0)
         metadata = mission_metadata(
-            "dynamic",
+            args.phase,
             snapshot,
             mission,
             duration_sec=args.duration_sec,
@@ -734,11 +844,20 @@ def main() -> int:
             requested_bank_limit_deg=args.bank_limit_deg,
             actual_bank_limit_deg=actual_bank_limit,
             mission_takeoff_landing_requirement=0,
-            commanded_altitude_offset_range_m=[-15.0, 15.0],
+            commanded_altitude_offset_range_m=(
+                [-10.0, 10.0]
+                if args.phase == "kau_figure8"
+                else [-15.0, 15.0]
+            ),
+            kau_figure8_radius_m=(
+                args.orbit_radius_m
+                if args.phase == "kau_figure8"
+                else None
+            ),
         )
 
     write_json(args.output, metadata)
-    print("[MISSION_STARTED]" if args.phase == "dynamic" else "[PREPARE_COMPLETE]")
+    print("[PREPARE_COMPLETE]" if args.phase == "prepare" else "[MISSION_STARTED]")
     return 0
 
 
